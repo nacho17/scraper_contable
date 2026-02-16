@@ -1,7 +1,11 @@
 import json
 import pandas as pd
 import sys
+import time
 from datetime import datetime, timedelta
+from utils.dates import dividir_en_bloques
+from web.downloader import iniciar_driver, login, logout, exportar_dataset
+from utils.reader import leer_archivo_descargado, mover_y_renombrar, esperar_descarga_completa
 
 
 def cargar_config(path="config.json"):
@@ -90,20 +94,81 @@ def main():
         "%Y-%m-%d"
     ).date()
 
+    usuarios = config["usuarios"]
     datasets = config["datasets"]
+    web_config = config["web"]
 
-    for dataset in datasets:
-        rango = procesar_dataset(
-            maestro_path=maestro_path,
-            dataset_config=dataset,
-            fecha_inicial_config=fecha_inicial_config
+    download_dir = config["paths"]["download_dir"]
+    driver = iniciar_driver(download_dir)
+
+    for usuario in usuarios:
+        print(f"\n👤 Procesando usuario: {usuario['nombre']}")
+
+        login(
+            driver,
+            web_config["login_url"],
+            usuario["username"],
+            usuario["password"]
         )
 
-        # Más adelante acá va:
-        # - scraping
-        # - borrar rango
-        # - insertar datos
-        # - extender formulas si corresponde
+        for dataset in datasets:
+            rango = procesar_dataset(
+                maestro_path,
+                dataset,
+                fecha_inicial_config
+            )
+
+            if rango is None:
+                continue
+
+            fecha_desde, fecha_hasta = rango
+
+            bloques = dividir_en_bloques(fecha_desde, fecha_hasta)
+
+            for sub_desde, sub_hasta in bloques:
+            
+                exportar_dataset(
+                    driver,
+                    dataset["url"],
+                    sub_desde,
+                    sub_hasta
+                )
+            
+                # Detectar archivo descargado
+                ruta_descargas = config["paths"]["download_dir"]
+                procesados_dir = config["paths"]["procesados_dir"]
+                
+                ultimo_archivo = esperar_descarga_completa(ruta_descargas)
+                
+                print(f"📄 Archivo detectado: {ultimo_archivo}")
+                
+                usuario_archivo, df_nuevo = leer_archivo_descargado(ultimo_archivo)
+                
+                # Validar usuario
+                if usuario_archivo != usuario["nombre"]:
+                    raise Exception(
+                        f"El archivo pertenece a {usuario_archivo} "
+                        f"pero se esperaba {usuario['nombre']}"
+                    )
+                
+                print(f"✅ Archivo válido para usuario {usuario_archivo}")
+                print(f"📊 Filas descargadas: {len(df_nuevo)}")
+                
+                # Renombrar y mover
+                nuevo_path = mover_y_renombrar(
+                    ultimo_archivo,
+                    procesados_dir,
+                    dataset["nombre"],
+                    usuario_archivo,
+                    fecha_desde,
+                    fecha_hasta
+                )
+                
+                print(f"📁 Movido a: {nuevo_path}")
+
+        logout(driver, web_config["logout_url"])
+
+    driver.quit()
 
     print("\n🏁 Proceso finalizado.")
 
