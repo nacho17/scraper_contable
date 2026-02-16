@@ -51,34 +51,37 @@ def mover_y_renombrar(path_original, carpeta_destino,
 
     return nuevo_path
 
-def esperar_descarga_completa(download_dir, timeout=30):
+def esperar_descarga_completa(download_dir, archivos_antes, timeout=30):
     segundos = 0
 
     while segundos < timeout:
-        archivos = os.listdir(download_dir)
+        actuales = set(os.listdir(download_dir))
+        nuevos = actuales - archivos_antes
 
-        # Si hay archivo temporal, seguimos esperando
-        if any(a.endswith(".crdownload") for a in archivos):
+        # Si todavía no aparece nada nuevo
+        if not nuevos:
             time.sleep(1)
             segundos += 1
             continue
 
-        # Tomamos el último archivo
-        if archivos:
-            ruta = max(
-                [os.path.join(download_dir, f) for f in archivos],
-                key=os.path.getctime
-            )
+        # Hay un archivo nuevo
+        archivo = nuevos.pop()
+        ruta = os.path.join(download_dir, archivo)
 
-            # Verificamos que no esté creciendo
-            size1 = os.path.getsize(ruta)
+        # Si todavía se está descargando
+        if archivo.endswith(".crdownload"):
             time.sleep(1)
-            size2 = os.path.getsize(ruta)
+            segundos += 1
+            continue
 
-            if size1 == size2:
-                return ruta
-
+        # Verificamos que el tamaño esté estable
+        size1 = os.path.getsize(ruta)
         time.sleep(1)
+        size2 = os.path.getsize(ruta)
+
+        if size1 == size2:
+            return ruta
+
         segundos += 1
 
     raise TimeoutError("La descarga no se completó en el tiempo esperado.")

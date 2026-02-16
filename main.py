@@ -1,7 +1,9 @@
 import json
+import os
 import pandas as pd
 import sys
 import time
+import shutil
 from datetime import datetime, timedelta
 from utils.dates import dividir_en_bloques
 from web.downloader import iniciar_driver, login, logout, exportar_dataset
@@ -83,7 +85,73 @@ def procesar_dataset(
     return fecha_desde, fecha_hasta
 
 
-def main():
+def descargar_y_leer_dataset(
+    driver,
+    dataset,
+    fecha_desde,
+    fecha_hasta,
+    ruta_descargas,
+    procesados_dir
+):
+    bloques = dividir_en_bloques(fecha_desde, fecha_hasta)
+
+    dfs = []
+    usuario_detectado = None
+
+    for sub_desde, sub_hasta in bloques:
+
+        print(f"🔹 Descargando bloque {sub_desde} → {sub_hasta}")
+
+        archivos_antes = set(os.listdir(ruta_descargas))
+
+        exportar_dataset(
+            driver,
+            dataset["url"],
+            sub_desde,
+            sub_hasta
+        )
+
+        ultimo_archivo = esperar_descarga_completa(ruta_descargas, archivos_antes)
+
+        print(f"📄 Archivo detectado: {ultimo_archivo}")        
+
+        usuario_archivo, df_nuevo = leer_archivo_descargado(ultimo_archivo)
+
+        print(f"📊 Filas de esta porción del dataset: {len(df_nuevo)}")
+
+        if usuario_detectado is None:
+            usuario_detectado = usuario_archivo
+
+        # Validación de coherencia
+        if usuario_archivo != usuario_detectado:
+            raise Exception("Inconsistencia en usuario detectado")
+
+        dfs.append(df_nuevo)
+
+        # 🔹 Guardar archivo para trazabilidad
+        nuevo_path = mover_y_renombrar(
+            ultimo_archivo,
+            procesados_dir,
+            dataset["nombre"],
+            usuario_archivo,
+            sub_desde,
+            sub_hasta
+        )
+
+        print(f"📁 Movido a: {nuevo_path}")
+
+    df_final = pd.concat(dfs, ignore_index=True)
+
+    return usuario_detectado, df_final
+
+def limpiar_download_temp(download_dir):
+    for archivo in os.listdir(download_dir):
+        ruta = os.path.join(download_dir, archivo)
+        if os.path.isfile(ruta):
+            os.remove(ruta)
+
+
+def main_proceso():
     config = cargar_config()
 
     maestro_path = config["excel"]["maestro_path"]
@@ -123,55 +191,37 @@ def main():
 
             fecha_desde, fecha_hasta = rango
 
-            bloques = dividir_en_bloques(fecha_desde, fecha_hasta)
-
-            for sub_desde, sub_hasta in bloques:
-            
-                exportar_dataset(
-                    driver,
-                    dataset["url"],
-                    sub_desde,
-                    sub_hasta
+            usuario_archivo, df_final = descargar_y_leer_dataset(
+                driver,
+                dataset,
+                fecha_desde,
+                fecha_hasta,
+                download_dir,
+                config["paths"]["procesados_dir"]
+            )
+                
+            # Validar usuario
+            if usuario_archivo != usuario["nombre"]:
+                raise Exception(
+                    f"El archivo pertenece a {usuario_archivo} "
+                    f"pero se esperaba {usuario['nombre']}"
                 )
             
-                # Detectar archivo descargado
-                ruta_descargas = config["paths"]["download_dir"]
-                procesados_dir = config["paths"]["procesados_dir"]
-                
-                ultimo_archivo = esperar_descarga_completa(ruta_descargas)
-                
-                print(f"📄 Archivo detectado: {ultimo_archivo}")
-                
-                usuario_archivo, df_nuevo = leer_archivo_descargado(ultimo_archivo)
-                
-                # Validar usuario
-                if usuario_archivo != usuario["nombre"]:
-                    raise Exception(
-                        f"El archivo pertenece a {usuario_archivo} "
-                        f"pero se esperaba {usuario['nombre']}"
-                    )
-                
-                print(f"✅ Archivo válido para usuario {usuario_archivo}")
-                print(f"📊 Filas descargadas: {len(df_nuevo)}")
-                
-                # Renombrar y mover
-                nuevo_path = mover_y_renombrar(
-                    ultimo_archivo,
-                    procesados_dir,
-                    dataset["nombre"],
-                    usuario_archivo,
-                    fecha_desde,
-                    fecha_hasta
-                )
-                
-                print(f"📁 Movido a: {nuevo_path}")
+            print(f"✅ Archivo válido para usuario {usuario_archivo}")
+            print(f"📊 Total filas unificadas: {len(df_final)}")
 
         logout(driver, web_config["logout_url"])
 
     driver.quit()
 
-    print("\n🏁 Proceso finalizado.")
+    return download_dir
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        download_dir = main_proceso()
+        limpiar_download_temp(download_dir)
+        print("\n🏁 Proceso finalizado correctamente.")
+    except Exception as e:
+        print("\n❌ Error detectado. Se preservan archivos temporales para análisis.")
+        raise
