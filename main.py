@@ -1,3 +1,4 @@
+from asyncio.log import logger
 import json
 import os
 import pandas as pd
@@ -5,6 +6,9 @@ import sys
 import time
 import shutil
 from datetime import datetime, timedelta
+from excel.updater import append_dataframe_to_excel, estirar_formulas
+from utils.logger import setup_logger
+from utils.converter import normalizar_y_validar_dataset
 from utils.dates import dividir_en_bloques
 from web.downloader import iniciar_driver, login, logout, exportar_dataset
 from utils.reader import leer_archivo_descargado, mover_y_renombrar, esperar_descarga_completa
@@ -31,7 +35,7 @@ def obtener_ultima_fecha(maestro_path, hoja_1, columna_fecha):
     # Convertir a datetime de forma segura
     df[columna_fecha] = pd.to_datetime(
         df[columna_fecha],
-        format="%d/%m/%Y",
+        dayfirst=True,
         errors="coerce"
     )
 
@@ -72,14 +76,25 @@ def procesar_dataset(
         fecha_desde = (ultima_fecha + timedelta(days=1)).date()
 
     hoy = datetime.today().date()
-    fecha_hasta = hoy - timedelta(days=1)
+    fecha_hasta = hoy - timedelta(days=88)
 
     print(f"📅 Fecha desde: {fecha_desde}")
     print(f"📅 Fecha hasta: {fecha_hasta}")
 
-    if fecha_desde > fecha_hasta:
+    if fecha_desde == fecha_hasta:
         print("ℹ️ No hay nuevas fechas para procesar.")
         return None
+    
+    if fecha_desde > fecha_hasta:
+        print(
+            f"Rango inválido: fecha_desde ({fecha_desde}) "
+            f"es mayor que fecha_hasta ({fecha_hasta}). "
+            "No se procesará ningún dataset."
+        )
+        logger.warning(
+            "Fecha desde es mayor que fecha hasta. No se procesará información."
+        )
+        return  # salida limpia
 
     print("🚀 Hay fechas nuevas para procesar.")
     return fecha_desde, fecha_hasta
@@ -153,6 +168,7 @@ def limpiar_download_temp(download_dir):
 
 def main_proceso():
     config = cargar_config()
+    logger = setup_logger()
 
     maestro_path = config["excel"]["maestro_path"]
     fecha_inicial_str = config["procesamiento"]["fecha_inicial_si_vacio"]
@@ -199,20 +215,57 @@ def main_proceso():
                 download_dir,
                 config["paths"]["procesados_dir"]
             )
-                
+
+            if df_final is None or df_final.empty:
+                logger.info(
+                    f"{dataset['nombre']} -> No hay fechas nuevas para procesar."
+                )
+                continue
+
             # Validar usuario
             if usuario_archivo != usuario["nombre"]:
                 raise Exception(
                     f"El archivo pertenece a {usuario_archivo} "
                     f"pero se esperaba {usuario['nombre']}"
                 )
+
+            df_final, resumen = normalizar_y_validar_dataset(
+                df_final,
+                dataset["columna_fecha"],
+                dataset["columnas_importe"],
+                logger=logger
+            ) 
             
             print(f"✅ Archivo válido para usuario {usuario_archivo}")
-            print(f"📊 Total filas unificadas: {len(df_final)}")
+            print(f"📊 Total filas unificadas: {len(df_final)}")            
+            print("Resumen de validaciones:")
+            print(resumen)
+
+            resultado_insert = append_dataframe_to_excel(
+                maestro_path=config["excel"]["maestro_path"],
+                hoja_destino=dataset["hoja_destino"],
+                df=df_final,
+                columna_inicio=dataset["columna_inicio"]
+            )
+
+            if dataset["tiene_formulas"]:
+                estirar_formulas(
+                    maestro_path=config["excel"]["maestro_path"],
+                    hoja_destino=dataset["hoja_destino"],
+                    fila_inicio=resultado_insert["fila_inicio"],
+                    filas_insertadas=resultado_insert["filas_insertadas"]
+                )
+
+            # Log interno
+            logger.info(
+                f"{dataset['nombre']} -> "
+                f"{resultado_insert['filas_insertadas']} filas insertadas "
+                f"desde fila {resultado_insert['fila_inicio']}"
+            )
 
         logout(driver, web_config["logout_url"])
 
-    driver.quit()
+    driver.quit()    
 
     return download_dir
 
