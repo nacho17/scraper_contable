@@ -76,7 +76,7 @@ def procesar_dataset(
         fecha_desde = (ultima_fecha + timedelta(days=1)).date()
 
     hoy = datetime.today().date()
-    fecha_hasta = hoy - timedelta(days=88)
+    fecha_hasta = hoy - timedelta(days=1)
 
     print(f"📅 Fecha desde: {fecha_desde}")
     print(f"📅 Fecha hasta: {fecha_hasta}")
