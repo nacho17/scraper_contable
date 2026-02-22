@@ -1,6 +1,5 @@
-playwright
-pandas
+﻿pandas
 openpyxl
-python-dateutil
 selenium
 webdriver-manager
+pytest

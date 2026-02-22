@@ -2,13 +2,15 @@ import os
 import time
 import shutil
 import pandas as pd
-import platform
-from datetime import datetime
+import logging
 from utils.converter import convertir_xls_a_xlsx
 
 
+logger = logging.getLogger("scraper_contable")
+
+
 def leer_archivo_descargado(path):
-    print("Leyendo archivo:", path)
+    logger.info("Leyendo archivo: %s", path)
 
     extension = os.path.splitext(path)[1].lower()
 
@@ -51,6 +53,7 @@ def mover_y_renombrar(path_original, carpeta_destino,
 
     return nuevo_path
 
+
 def esperar_descarga_completa(download_dir, archivos_antes, timeout=30):
     segundos = 0
 
@@ -58,7 +61,7 @@ def esperar_descarga_completa(download_dir, archivos_antes, timeout=30):
         actuales = set(os.listdir(download_dir))
         nuevos = actuales - archivos_antes
 
-        # Si todavía no aparece nada nuevo
+        # Si todav?a no aparece nada nuevo
         if not nuevos:
             time.sleep(1)
             segundos += 1
@@ -68,13 +71,13 @@ def esperar_descarga_completa(download_dir, archivos_antes, timeout=30):
         archivo = nuevos.pop()
         ruta = os.path.join(download_dir, archivo)
 
-        # Si todavía se está descargando
+        # Si todav?a se est? descargando
         if archivo.endswith(".crdownload"):
             time.sleep(1)
             segundos += 1
             continue
 
-        # Verificamos que el tamaño esté estable
+        # Verificamos que el tama?o est? estable
         size1 = os.path.getsize(ruta)
         time.sleep(1)
         size2 = os.path.getsize(ruta)
@@ -84,4 +87,4 @@ def esperar_descarga_completa(download_dir, archivos_antes, timeout=30):
 
         segundos += 1
 
-    raise TimeoutError("La descarga no se completó en el tiempo esperado.")
+    raise TimeoutError("La descarga no se complet? en el tiempo esperado.")

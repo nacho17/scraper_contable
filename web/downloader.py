@@ -1,13 +1,14 @@
-import time
 import os
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import UnexpectedAlertPresentException
-from selenium.webdriver.common.alert import Alert
 from webdriver_manager.chrome import ChromeDriverManager
+import logging
+
+
+logger = logging.getLogger("scraper_contable")
 
 
 def iniciar_driver(download_dir):
@@ -49,17 +50,17 @@ def iniciar_driver(download_dir):
 def login(driver, login_url, username, password):
     driver.get(login_url)
 
-    # AJUSTAR SELECTORES SEGÚN LA WEB REAL
+    # AJUSTAR SELECTORES SEG?N LA WEB REAL
     driver.find_element(By.NAME, "LoginForm[username]").send_keys(username)
     driver.find_element(By.NAME, "LoginForm[password]").send_keys(password)
     driver.find_element(By.NAME, "yt0").click()
 
-    print(f"🔐 Logueado como {username}")
+    logger.info("Logueado como %s", username)
 
 
 def logout(driver, logout_url):
     driver.get(logout_url)
-    print("🔓 Logout realizado")
+    logger.info("Logout realizado")
 
 
 def exportar_dataset(driver, dataset_url, fecha_desde, fecha_hasta):
@@ -77,7 +78,7 @@ def exportar_dataset(driver, dataset_url, fecha_desde, fecha_hasta):
     fecha_hasta_str = fecha_hasta.strftime("%d/%m/%Y")
 
     from_input = driver.find_element(By.ID, "from")
-    from_input.clear()    
+    from_input.clear()
 
     to_input = driver.find_element(By.ID, "to")
     to_input.clear()
@@ -89,7 +90,7 @@ def exportar_dataset(driver, dataset_url, fecha_desde, fecha_hasta):
         EC.element_to_be_clickable((By.NAME, "yt1"))
     ).click()
 
-    print(f"📥 Export solicitado desde {fecha_desde} hasta {fecha_hasta}")
+    logger.info("Export solicitado desde %s hasta %s", fecha_desde, fecha_hasta)
 
     try:
         WebDriverWait(driver, 3).until(EC.alert_is_present())
@@ -99,4 +100,3 @@ def exportar_dataset(driver, dataset_url, fecha_desde, fecha_hasta):
         raise Exception(f"Error del sistema: {mensaje}")
     except:
         pass
-    
