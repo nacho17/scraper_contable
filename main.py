@@ -1,12 +1,19 @@
 import json
 import os
+import sys
 import pandas as pd
 from datetime import datetime, timedelta
 from excel.updater import append_dataframe_to_excel, estirar_formulas
 from utils.logger import setup_logger
 from utils.converter import normalizar_y_validar_dataset
 from utils.dates import dividir_en_bloques
-from web.downloader import iniciar_driver, login, logout, exportar_dataset
+from web.downloader import (
+    AuthenticationError,
+    iniciar_driver,
+    login,
+    logout,
+    exportar_dataset,
+)
 from utils.reader import leer_archivo_descargado, mover_y_renombrar, esperar_descarga_completa
 
 
@@ -275,6 +282,11 @@ if __name__ == "__main__":
         download_dir = main_proceso()
         limpiar_download_temp(download_dir)
         logger.info("Proceso finalizado correctamente.")
+    except AuthenticationError:
+        logger.error("Error de autenticación: verifique usuario y contraseña en config.json")
+        print("ERROR: Problema de autenticación. Revise usuario/contraseña en config.json.")
+        sys.exit(1)
     except Exception:
-        logger.exception("Error detectado. Se preservan archivos temporales para an?lisis.")
-        raise
+        logger.exception("Error inesperado durante la ejecución.")
+        print("ERROR: Ocurrió un error inesperado. Revise el archivo de log para más detalles.")
+        sys.exit(1)

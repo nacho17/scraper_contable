@@ -4,11 +4,16 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 import logging
 
 
 logger = logging.getLogger("scraper_contable")
+
+
+class AuthenticationError(Exception):
+    pass
 
 
 def iniciar_driver(download_dir):
@@ -55,7 +60,44 @@ def login(driver, login_url, username, password):
     driver.find_element(By.NAME, "LoginForm[password]").send_keys(password)
     driver.find_element(By.NAME, "yt0").click()
 
+    try:
+        WebDriverWait(driver, 10).until(
+            lambda d: _login_fallido(d) or not d.find_elements(By.NAME, "LoginForm[username]")
+        )
+    except TimeoutException:
+        pass
+
+    if _login_fallido(driver):
+        raise AuthenticationError("Credenciales inválidas o vencidas.")
+
     logger.info("Logueado como %s", username)
+
+
+def _login_fallido(driver):
+    page_text = driver.page_source.lower()
+    error_keywords = (
+        "credenciales inválidas",
+        "credenciales invalidas",
+        "usuario o contraseña incorrect",
+        "usuario o contrasena incorrect",
+        "login incorrect",
+        "invalid credentials",
+        "incorrect username",
+        "incorrect password",
+    )
+
+    if any(keyword in page_text for keyword in error_keywords):
+        return True
+
+    current_url = (driver.current_url or "").lower()
+    if "login" in current_url or "signin" in current_url:
+        if (
+            driver.find_elements(By.NAME, "LoginForm[username]")
+            and driver.find_elements(By.NAME, "LoginForm[password]")
+        ):
+            return True
+
+    return False
 
 
 def logout(driver, logout_url):

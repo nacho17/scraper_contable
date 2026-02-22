@@ -1,18 +1,18 @@
-﻿# README - Grupo2000 - Automatización Contable
+﻿# README - Grupo2000 - Automatizacion Contable
 
-## Descripción
+## Descripcion
 
-Grupo2000 es un script de automatización para procesamiento y consolidación de datos contables.
+Grupo2000 es un script de automatizacion para procesamiento y consolidacion de datos contables.
 
-El proyecto está diseñado para ejecutarse desde consola (sin interfaz gráfica) y puede compilarse como ejecutable independiente para Windows y macOS.
+El proyecto esta disenado para ejecutarse desde consola (sin interfaz grafica) y puede compilarse como ejecutable independiente para Windows y macOS.
 
-## Características
+## Caracteristicas
 
 - Script 100% CLI (sin UI)
 - Logging estructurado (archivo + consola)
 - Compatible con Windows y macOS
 - Compilable con PyInstaller (modo onefile)
-- Preparado para ejecución manual o programada (cron en macOS)
+- Preparado para ejecucion manual o programada (cron en macOS)
 
 ## Requisitos de desarrollo
 
@@ -20,7 +20,24 @@ El proyecto está diseñado para ejecutarse desde consola (sin interfaz gráfica
 - pip
 - Entorno virtual recomendado
 
-Las dependencias están definidas en `requirements.txt`.
+Las dependencias estan definidas en `requirements.txt`.
+
+## Requisito adicional: LibreOffice para archivos .xls
+
+Para procesar correctamente archivos con extension `.xls`, es obligatorio tener LibreOffice instalado en el sistema.
+
+Esto se debe a que la conversion de `.xls` a `.xlsx` depende de las funciones `obtener_comando_libreoffice` y `convertir_xls_a_xlsx` en `utils/converter.py`, que buscan y ejecutan `libreoffice`/`soffice`.
+
+Rutas tipicas detectadas por el proyecto:
+
+- Windows: `C:\Program Files\LibreOffice\program\soffice.exe`
+- macOS: `/Applications/LibreOffice.app`
+
+Si LibreOffice no esta disponible, el programa registrara un error en el log durante la conversion.
+
+Descarga oficial de LibreOffice:
+
+- https://www.libreoffice.org/download/download-libreoffice/
 
 ## Entorno de desarrollo
 
@@ -60,12 +77,12 @@ Ejecutar tests con Makefile:
 make test
 ```
 
-Qué se testea:
+Que se testea:
 
-- Lógica interna de procesamiento de datos (fechas, ordenamiento y transformaciones de `DataFrame`).
-- Validaciones de rangos y condiciones inválidas sin romper flujo.
+- Logica interna de procesamiento de datos (fechas, ordenamiento y transformaciones de `DataFrame`).
+- Validaciones de rangos y condiciones invalidas sin romper flujo.
 - Lectura/parsing de archivo y utilidades de manejo de archivos temporales.
-- Inserción en Excel y detección de última fila de datos.
+- Insercion en Excel y deteccion de ultima fila de datos.
 
 No se ejecutan tests E2E con Selenium ni pruebas dependientes de internet.
 
@@ -74,7 +91,7 @@ No se ejecutan tests E2E con Selenium ni pruebas dependientes de internet.
 ```bash
 make install    # crea venv (si no existe) e instala dependencias
 make test       # corre pytest
-make lint       # validación sintáctica básica con py_compile
+make lint       # validacion sintactica basica con py_compile
 make build-win  # ejecuta build/windows/build_windows.bat
 make build-mac  # ejecuta build/mac/build_mac.sh
 ```
@@ -97,7 +114,7 @@ Los logs se generan en el mismo directorio donde se encuentra el ejecutable.
 
 ## Build para Windows
 
-Desde la raíz del proyecto:
+Desde la raiz del proyecto:
 
 Instalar PyInstaller:
 
@@ -117,19 +134,22 @@ Se genera:
 dist\Grupo2000.exe
 ```
 
-Características del build:
+Luego del build, el script intenta copiar automaticamente `config.json` en `dist\`.
+Si `config.json` no existe en la raiz del proyecto, muestra un aviso y el build continua.
+
+Caracteristicas del build:
 
 - onefile
 - clean
 - Sin modo windowed
 - Ejecutable de consola
-- No requiere instalación
+- No requiere instalacion
 
 ## Build para macOS
 
 En la Mac del usuario:
 
-Instalar Python si no está instalado:
+Instalar Python si no esta instalado:
 
 ```bash
 brew install python
@@ -163,7 +183,33 @@ dist/Grupo2000
 Importante:
 El build debe realizarse en macOS para generar binario compatible con macOS.
 
-## Ejecución manual
+## Archivos requeridos junto al ejecutable
+
+Para ejecutar el programa fuera del entorno de desarrollo, deben estar en la misma carpeta:
+
+- `Grupo2000.exe`
+- `config.json`
+
+## Nota sobre preparacion del Excel Maestro
+
+El Excel maestro debe estar preparado previamente.
+No debe contener formulas matriciales en las columnas donde el sistema inserta datos.
+Esta es una condicion inicial del archivo y no es modificada automaticamente por el programa.
+
+## Manejo de errores de autenticacion
+
+Si el programa muestra el siguiente mensaje:
+
+`ERROR: Problema de autenticación. Revise usuario/contraseña en config.json.`
+
+Debe:
+
+- Abrir `config.json`
+- Actualizar usuario y/o contraseña
+- Guardar cambios
+- Ejecutar nuevamente
+
+## Ejecucion manual
 
 En Windows:
 
@@ -177,9 +223,9 @@ En macOS:
 ./dist/Grupo2000
 ```
 
-## Ejecución automática en macOS (cron)
+## Ejecucion automatica en macOS (cron)
 
-Para ejecutar diariamente mientras la Mac esté encendida:
+Para ejecutar diariamente mientras la Mac este encendida:
 
 Abrir terminal:
 
@@ -187,14 +233,14 @@ Abrir terminal:
 crontab -e
 ```
 
-Agregar una línea como ejemplo (8:00 AM):
+Agregar una linea como ejemplo (8:00 AM):
 
 ```cron
 0 8 * * * /ruta/completa/dist/Grupo2000 >> /ruta/completa/cron.log 2>&1
 ```
 
-Si la máquina está apagada en el horario programado, la ejecución se omite.
-El usuario puede ejecutar el programa manualmente luego y el sistema procesará lo pendiente según su lógica interna.
+Si la maquina esta apagada en el horario programado, la ejecucion se omite.
+El usuario puede ejecutar el programa manualmente luego y el sistema procesara lo pendiente segun su logica interna.
 
 ## Estructura del proyecto
 
@@ -222,28 +268,28 @@ logs/
 Makefile
 ```
 
-## Buenas prácticas del repositorio
+## Buenas practicas del repositorio
 
 - No se versionan binarios (`dist/`)
 - No se versionan artefactos de PyInstaller
 - No se versionan entornos virtuales
-- El repositorio contiene solo código fuente y scripts de build
+- El repositorio contiene solo codigo fuente y scripts de build
 
-## Distribución
+## Distribucion
 
 Opciones recomendadas:
 
-- Compilar en cada sistema operativo desde el código fuente.
+- Compilar en cada sistema operativo desde el codigo fuente.
 - Entregar el ejecutable generado.
 - No es necesario instalador. El ejecutable es portable.
 
-## Notas técnicas
+## Notas tecnicas
 
-- Proyecto CLI, sin interfaz gráfica.
+- Proyecto CLI, sin interfaz grafica.
 - No utiliza modo windowed.
-- Puede requerir autorización inicial en macOS si Gatekeeper lo solicita.
-- No requiere firma para ejecución desde terminal.
+- Puede requerir autorizacion inicial en macOS si Gatekeeper lo solicita.
+- No requiere firma para ejecucion desde terminal.
 
 ## Estado del proyecto
 
-Proyecto preparado para fase de compilación y pruebas en Windows y macOS.
+Proyecto preparado para fase de compilacion y pruebas en Windows y macOS.
