@@ -3,7 +3,11 @@ import os
 import sys
 import pandas as pd
 from datetime import datetime, timedelta
-from excel.updater import append_dataframe_to_excel, estirar_formulas
+from excel.updater import (
+    MasterExcelArrayFormulaError,
+    append_dataframe_to_excel,
+    estirar_formulas,
+)
 from utils.logger import setup_logger
 from utils.converter import normalizar_y_validar_dataset
 from utils.dates import dividir_en_bloques
@@ -285,6 +289,10 @@ if __name__ == "__main__":
     except AuthenticationError:
         logger.error("Error de autenticación: verifique usuario y contraseña en config.json")
         print("ERROR: Problema de autenticación. Revise usuario/contraseña en config.json.")
+        sys.exit(1)
+    except MasterExcelArrayFormulaError as exc:
+        logger.error(str(exc))
+        print("ERROR: El Excel maestro tiene fórmulas array en la última fila. Revise y vuelva a ejecutar.")
         sys.exit(1)
     except Exception:
         logger.exception("Error inesperado durante la ejecución.")

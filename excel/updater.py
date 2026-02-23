@@ -1,6 +1,10 @@
-from openpyxl import load_workbook
+﻿from openpyxl import load_workbook
 from openpyxl.formula.translate import Translator
 from copy import copy
+
+
+class MasterExcelArrayFormulaError(Exception):
+    pass
 
 
 def append_dataframe_to_excel(
@@ -17,7 +21,7 @@ def append_dataframe_to_excel(
 
     ws = wb[hoja_destino]
 
-    # Buscar última fila real basada en la columna_inicio
+    # Buscar ultima fila real basada en la columna_inicio
     ultima_fila = ws.max_row
     while (
         ultima_fila > 1
@@ -59,6 +63,7 @@ def append_dataframe_to_excel(
         "filas_insertadas": len(df)
     }
 
+
 def estirar_formulas(
     maestro_path,
     hoja_destino,
@@ -85,13 +90,22 @@ def estirar_formulas(
                 nueva_fila = fila_inicio + i
                 nueva_celda = ws.cell(row=nueva_fila, column=col)
 
-                # Traducir fórmula ajustando referencias
-                nueva_formula = Translator(
-                    formula_base,
-                    origin=coordenada_base
-                ).translate_formula(
-                    ws.cell(row=nueva_fila, column=col).coordinate
-                )
+                # Traducir formula ajustando referencias
+                try:
+                    nueva_formula = Translator(
+                        formula_base,
+                        origin=coordenada_base
+                    ).translate_formula(
+                        ws.cell(row=nueva_fila, column=col).coordinate
+                    )
+                except TypeError as exc:
+                    if "ArrayFormula" in str(exc):
+                        raise MasterExcelArrayFormulaError(
+                            "No se pueden estirar formulas tipo array en el Excel maestro. "
+                            "Revise la ultima fila de la hoja destino y asegure que no tenga formulas array "
+                            "(entre llaves {}) en las columnas donde se insertan datos."
+                        ) from exc
+                    raise
 
                 nueva_celda.value = nueva_formula
 

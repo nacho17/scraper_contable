@@ -1,4 +1,4 @@
-import os
+﻿import os
 import time
 import shutil
 import pandas as pd
@@ -54,7 +54,7 @@ def mover_y_renombrar(path_original, carpeta_destino,
     return nuevo_path
 
 
-def esperar_descarga_completa(download_dir, archivos_antes, timeout=30):
+def esperar_descarga_completa(download_dir, archivos_antes, timeout=180):
     segundos = 0
 
     while segundos < timeout:
