@@ -2,16 +2,16 @@
 
 ifeq ($(OS),Windows_NT)
 PYTHON ?= python
-VENV_PY := venv/Scripts/python
+VENV_PY := .venv/Scripts/python
 else
 PYTHON ?= python3
-VENV_PY := venv/bin/python
+VENV_PY := .venv/bin/python
 endif
 
 .PHONY: install test lint build-win build-mac
 
 install:
-	@if [ ! -d venv ]; then $(PYTHON) -m venv venv; fi
+	@if [ ! -d .venv ]; then $(PYTHON) -m venv .venv; fi
 	@$(VENV_PY) -m pip install --upgrade pip
 	@$(VENV_PY) -m pip install -r requirements.txt
 
