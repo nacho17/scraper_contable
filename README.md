@@ -183,6 +183,76 @@ dist/Grupo2000
 Importante:
 El build debe realizarse en macOS para generar binario compatible con macOS.
 
+## Instalacion en macOS
+
+Esta instalacion ejecuta el proyecto como script Python dentro de `.venv` (sin PyInstaller en Mac).
+
+Pasos:
+
+1. Abrir Terminal y ubicarse en la carpeta del repositorio.
+2. Dar permisos al instalador:
+
+```bash
+chmod +x setup_mac.sh
+```
+
+3. Ejecutar instalacion:
+
+```bash
+./setup_mac.sh
+```
+
+Que hace `setup_mac.sh`:
+
+- Verifica que `python3` exista.
+- Verifica que LibreOffice este disponible (`libreoffice` o `/Applications/LibreOffice.app/Contents/MacOS/soffice`).
+- Crea `.venv` si no existe.
+- Instala dependencias desde `requirements.txt`.
+- Da permisos a `run.command`.
+- Crea acceso directo en el Escritorio: `~/Desktop/Grupo2000.command`.
+
+Ejecucion:
+
+- Desde Terminal:
+
+```bash
+./run.command
+```
+
+- O con doble clic en `~/Desktop/Grupo2000.command`.
+
+Log de la ultima ejecucion:
+
+- `logs/last_run.log`
+
+Configuracion recomendada de `crontab` (opcional):
+
+1. Abrir el editor de cron:
+
+```bash
+crontab -e
+```
+
+2. Agregar una linea (ejemplo: ejecutar todos los dias a las 08:00):
+
+```cron
+0 8 * * * /bin/bash /ruta/al/repositorio/run.command >> /ruta/al/repositorio/logs/cron.log 2>&1
+```
+
+3. Guardar y cerrar el editor.
+
+4. Verificar que quedo cargado:
+
+```bash
+crontab -l
+```
+
+Recomendaciones:
+
+- Usar rutas completas en `crontab`.
+- Confirmar permisos de ejecucion en `run.command` (`chmod +x run.command`).
+- Revisar `logs/last_run.log` y `logs/cron.log` para diagnostico.
+
 ## Archivos requeridos junto al ejecutable
 
 Para ejecutar el programa fuera del entorno de desarrollo, deben estar en la misma carpeta:
