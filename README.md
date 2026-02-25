@@ -135,7 +135,8 @@ dist\Grupo2000.exe
 ```
 
 Luego del build, el script intenta copiar automaticamente `config.json` en `dist\`.
-Si `config.json` no existe en la raiz del proyecto, muestra un aviso y el build continua.
+Si `config.json` no existe en la raiz del proyecto, intenta copiar `config_example.json`.
+Si no existe ninguno de los dos, muestra un aviso y el build continua.
 
 Caracteristicas del build:
 
@@ -208,7 +209,7 @@ Que hace `setup_mac.sh`:
 - Verifica que LibreOffice este disponible (`libreoffice` o `/Applications/LibreOffice.app/Contents/MacOS/soffice`).
 - Crea `.venv` si no existe.
 - Instala dependencias desde `requirements.txt`.
-- Da permisos a `run.command`.
+- Da permisos a `run.command` y `run_auto.command`.
 - Crea acceso directo en el Escritorio: `~/Desktop/Grupo2000.command`.
 
 Ejecucion:
@@ -236,7 +237,7 @@ crontab -e
 2. Agregar una linea (ejemplo: ejecutar todos los dias a las 08:00):
 
 ```cron
-0 8 * * * /bin/bash /ruta/al/repositorio/run.command >> /ruta/al/repositorio/logs/cron.log 2>&1
+0 8 * * * /bin/bash /ruta/al/repositorio/run_auto.command >> /ruta/al/repositorio/logs/cron.log 2>&1
 ```
 
 3. Guardar y cerrar el editor.
@@ -250,15 +251,16 @@ crontab -l
 Recomendaciones:
 
 - Usar rutas completas en `crontab`.
-- Confirmar permisos de ejecucion en `run.command` (`chmod +x run.command`).
+- Confirmar permisos de ejecucion en `run.command` y `run_auto.command` (`chmod +x run.command run_auto.command`).
 - Revisar `logs/last_run.log` y `logs/cron.log` para diagnostico.
+- Si la maquina esta apagada en el horario programado, la ejecucion se omite; luego puede ejecutarse manualmente y el sistema procesara lo pendiente segun su logica interna.
 
 ## Archivos requeridos junto al ejecutable
 
 Para ejecutar el programa fuera del entorno de desarrollo, deben estar en la misma carpeta:
 
 - `Grupo2000.exe`
-- `config.json`
+- `config.json` (o `config_example.json` como plantilla para generar el real)
 
 ## Nota sobre preparacion del Excel Maestro
 
@@ -289,28 +291,24 @@ dist\Grupo2000.exe
 
 En macOS:
 
+- Ejecucion instalada (recomendada):
+
+```bash
+./run.command
+```
+
+- Ejecucion de binario compilado (`dist/Grupo2000`):
+
 ```bash
 ./dist/Grupo2000
 ```
 
 ## Ejecucion automatica en macOS (cron)
 
-Para ejecutar diariamente mientras la Mac este encendida:
+Referencia rapida:
 
-Abrir terminal:
-
-```bash
-crontab -e
-```
-
-Agregar una linea como ejemplo (8:00 AM):
-
-```cron
-0 8 * * * /ruta/completa/dist/Grupo2000 >> /ruta/completa/cron.log 2>&1
-```
-
-Si la maquina esta apagada en el horario programado, la ejecucion se omite.
-El usuario puede ejecutar el programa manualmente luego y el sistema procesara lo pendiente segun su logica interna.
+- Si usa instalacion con `.venv`, programe `run_auto.command`.
+- Si distribuye binario compilado, puede programar `dist/Grupo2000`.
 
 ## Estructura del proyecto
 
@@ -372,7 +370,7 @@ Proyecto preparado para fase de compilacion y pruebas en Windows y macOS.
 - Automático: `run_auto.command` (headless)
 - El sistema anuncia verbalmente el resultado al finalizar.
 
-Ejemplo de cron:
+Ejemplo de cron (equivalente al criterio ya detallado en la seccion de instalacion en macOS):
 
 ```cron
 0 8 * * * /bin/bash /Users/usuario/Grupo2000/run_auto.command

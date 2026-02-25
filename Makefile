@@ -19,7 +19,7 @@ test:
 	@$(VENV_PY) -m pytest -q
 
 lint:
-	@$(VENV_PY) -m py_compile main.py utils/*.py web/*.py excel/*.py tests/*.py
+	@$(VENV_PY) -m compileall -q main.py utils web excel tests
 
 build-win:
 ifeq ($(OS),Windows_NT)
