@@ -1,0 +1,54 @@
+{
+  "web": {
+    "login_url": "https://example.com/Grupo2000/index.php?r=site/login",
+    "logout_url": "https://example.com/Grupo2000/index.php?r=site/logout"
+  },
+  "paths": {
+    "download_dir": "downloads_temp",
+    "procesados_dir": "procesados"
+  },
+  "excel": {
+    "maestro_path": "C:\\Users\\TU_USUARIO\\Documents\\ExcelMaestro.xlsx"
+  },
+  "procesamiento": {
+    "fecha_inicial_si_vacio": "2025-01-01"
+  },
+  "usuarios": [
+    {
+      "nombre": "USUARIO_EJEMPLO",
+      "username": "USERNAME_EJEMPLO",
+      "password": "PASSWORD_EJEMPLO"
+    }
+  ],
+  "datasets": [
+    {
+      "nombre": "FACTURADOS",
+      "hoja_destino": "facturadosok",
+      "columna_inicio": 1,
+      "columna_fecha": "Fecha",
+      "columnas_importe": [
+        "PrecioVenta",
+        "Total",
+        "Cantidad",
+        "UxB"
+      ],
+      "tiene_formulas": true,
+      "url": "https://example.com/Grupo2000/index.php?r=productosfacturados/index"
+    },
+    {
+      "nombre": "RETIROS",
+      "hoja_destino": "retirosok",
+      "columna_inicio": 2,
+      "columna_fecha": "FechaRemito",
+      "columnas_importe": [
+        "CostoUnitario",
+        "CostoTotal",
+        "UxB",
+        "Unidades",
+        "Bultos"
+      ],
+      "tiene_formulas": false,
+      "url": "https://example.com/Grupo2000/index.php?r=entregas/index"
+    }
+  ]
+}

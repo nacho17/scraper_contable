@@ -40,6 +40,7 @@ echo "==> Instalando dependencias desde requirements.txt..."
 
 echo "==> Configurando permisos de ejecución..."
 chmod +x "${SCRIPT_DIR}/run.command"
+chmod +x "${SCRIPT_DIR}/run_auto.command"
 
 DESKTOP_LINK="${HOME}/Desktop/Grupo2000.command"
 TARGET="${SCRIPT_DIR}/run.command"

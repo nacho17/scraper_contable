@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 
 mkdir -p logs
 
-.venv/bin/python main.py --mode manual > "logs/last_run.log" 2>&1
+.venv/bin/python main.py --mode auto > "logs/last_run.log" 2>&1
 EXIT_CODE=$?
 
 if [ "$EXIT_CODE" -eq 0 ]; then

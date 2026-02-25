@@ -1,5 +1,8 @@
+import argparse
+import ctypes
 import json
 import os
+import platform
 import sys
 import pandas as pd
 from datetime import datetime, timedelta
@@ -34,7 +37,7 @@ def obtener_ultima_fecha(maestro_path, hoja_1, columna_fecha):
             engine="openpyxl"
         )
     except FileNotFoundError:
-        raise Exception(f"No se encontr? el archivo: {maestro_path}")
+        raise Exception(f"No se encontró el archivo: {maestro_path}")
 
     if columna_fecha not in df.columns:
         raise Exception(f"La columna '{columna_fecha}' no existe en la hoja '{hoja_1}'")
@@ -46,13 +49,13 @@ def obtener_ultima_fecha(maestro_path, hoja_1, columna_fecha):
         errors="coerce"
     )
 
-    # Eliminar fechas inv?lidas o vac?as
+    # Eliminar fechas inválidas o vacías
     df_valid = df[df[columna_fecha].notna()]
 
     if df_valid.empty:
         return None
 
-    # Tomar la fecha m?xima
+    # Tomar la fecha máxima
     ultima_fecha = df_valid[columna_fecha].max()
 
     return ultima_fecha
@@ -77,10 +80,10 @@ def procesar_dataset(
     )
 
     if ultima_fecha is None:
-        logger.warning("Archivo vac?o o sin fechas v?lidas.")
+        logger.warning("Archivo vacío o sin fechas válidas.")
         fecha_desde = fecha_inicial_config
     else:
-        logger.info("?ltima fecha encontrada: %s", ultima_fecha.date())
+        logger.info("Última fecha encontrada: %s", ultima_fecha.date())
         fecha_desde = (ultima_fecha + timedelta(days=1)).date()
 
     hoy = datetime.today().date()
@@ -95,7 +98,7 @@ def procesar_dataset(
 
     if fecha_desde > fecha_hasta:
         logger.warning(
-            "Rango inv?lido: fecha_desde (%s) es mayor que fecha_hasta (%s). No se procesar? ning?n dataset.",
+            "Rango inválido: fecha_desde (%s) es mayor que fecha_hasta (%s). No se procesará ningún dataset.",
             fecha_desde,
             fecha_hasta
         )
@@ -137,12 +140,12 @@ def descargar_y_leer_dataset(
 
         usuario_archivo, df_nuevo = leer_archivo_descargado(ultimo_archivo)
 
-        logger.info("Filas de esta porci?n del dataset: %s", len(df_nuevo))
+        logger.info("Filas de esta porción del dataset: %s", len(df_nuevo))
 
         if usuario_detectado is None:
             usuario_detectado = usuario_archivo
 
-        # Validaci?n de coherencia
+        # Validación de coherencia
         if usuario_archivo != usuario_detectado:
             raise Exception("Inconsistencia en usuario detectado")
 
@@ -172,7 +175,43 @@ def limpiar_download_temp(download_dir):
             os.remove(ruta)
 
 
-def main_proceso():
+def resolver_headless(mode):
+    sistema = platform.system()
+
+    if sistema == "Darwin":
+        return mode == "auto"
+
+    return False
+
+
+def notificar_windows(success):
+    if platform.system() != "Windows":
+        return
+
+    try:
+        import winsound
+
+        if success:
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
+        else:
+            winsound.MessageBeep(winsound.MB_ICONHAND)
+    except Exception:
+        pass
+
+    try:
+        if success:
+            mensaje = "Proceso finalizado correctamente"
+            estilo = 0x00000040
+        else:
+            mensaje = "Error en la ejecución. Revisar log."
+            estilo = 0x00000010
+
+        ctypes.windll.user32.MessageBoxW(0, mensaje, "Grupo2000", estilo)
+    except Exception:
+        pass
+
+
+def main_proceso(mode="manual"):
     config = cargar_config()
     logger = setup_logger()
 
@@ -189,7 +228,9 @@ def main_proceso():
     web_config = config["web"]
 
     download_dir = config["paths"]["download_dir"]
-    driver = iniciar_driver(download_dir)
+    headless = resolver_headless(mode)
+    logger.info("Modo de ejecución: %s | Headless: %s", mode, headless)
+    driver = iniciar_driver(download_dir, headless=headless)
 
     for usuario in usuarios:
         logger.info("Procesando usuario: %s", usuario["nombre"])
@@ -245,7 +286,7 @@ def main_proceso():
                 logger=logger
             )
 
-            logger.info("Archivo v?lido para usuario %s", usuario_archivo)
+            logger.info("Archivo válido para usuario %s", usuario_archivo)
             logger.info("Total filas unificadas: %s", len(df_final))
             logger.info("Resumen de validaciones:")
             logger.info("%s", resumen)
@@ -280,21 +321,33 @@ def main_proceso():
     return download_dir
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=["manual", "auto"], default="manual")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    args = parse_args()
     logger = setup_logger()
     try:
-        download_dir = main_proceso()
+        download_dir = main_proceso(mode=args.mode)
         limpiar_download_temp(download_dir)
         logger.info("Proceso finalizado correctamente.")
+        notificar_windows(success=True)
+        sys.exit(0)
     except AuthenticationError:
         logger.error("Error de autenticación: verifique usuario y contraseña en config.json")
         print("ERROR: Problema de autenticación. Revise usuario/contraseña en config.json.")
+        notificar_windows(success=False)
         sys.exit(1)
     except MasterExcelArrayFormulaError as exc:
         logger.error(str(exc))
         print("ERROR: El Excel maestro tiene fórmulas array en la última fila. Revise y vuelva a ejecutar.")
+        notificar_windows(success=False)
         sys.exit(1)
     except Exception:
         logger.exception("Error inesperado durante la ejecución.")
         print("ERROR: Ocurrió un error inesperado. Revise el archivo de log para más detalles.")
+        notificar_windows(success=False)
         sys.exit(1)

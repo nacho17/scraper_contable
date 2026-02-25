@@ -16,7 +16,7 @@ class AuthenticationError(Exception):
     pass
 
 
-def iniciar_driver(download_dir):
+def iniciar_driver(download_dir, headless=False):
     if not os.path.exists(download_dir):
         os.makedirs(download_dir)
 
@@ -32,7 +32,12 @@ def iniciar_driver(download_dir):
 
     options.add_experimental_option("prefs", prefs)
 
-    options.add_argument("--start-maximized")
+    if headless:
+        options.add_argument("--headless=new")
+        options.add_argument("--window-size=1920,1080")
+    else:
+        options.add_argument("--start-maximized")
+
     options.add_argument("--allow-running-insecure-content")
     options.add_argument("--ignore-certificate-errors")
 
@@ -55,7 +60,7 @@ def iniciar_driver(download_dir):
 def login(driver, login_url, username, password):
     driver.get(login_url)
 
-    # AJUSTAR SELECTORES SEG?N LA WEB REAL
+    # AJUSTAR SELECTORES SEGÚN LA WEB REAL
     driver.find_element(By.NAME, "LoginForm[username]").send_keys(username)
     driver.find_element(By.NAME, "LoginForm[password]").send_keys(password)
     driver.find_element(By.NAME, "yt0").click()

@@ -1,242 +1,153 @@
-# 📙 Documentación Funcional  
-## Sistema de Actualización Automática – Grupo2000
-
----
+# Documentación Funcional
+## Sistema de Actualización Automática - Grupo2000
 
 ## 1. Objetivo del Sistema
 
-El sistema tiene como objetivo automatizar el proceso de:
+Automatizar:
 
-- Descarga de datos desde una plataforma web.
+- Descarga de datos desde plataforma web.
 - Procesamiento y transformación de archivos.
-- Actualización incremental de un Excel maestro.
-- Extensión automática de fórmulas.
-- Ejecución manual o programada (scheduler).
-
-Se diseñó para eliminar tareas manuales repetitivas y reducir errores operativos.
-
----
+- Actualización incremental de Excel maestro.
+- Extensión de fórmulas.
+- Ejecución manual y automática según sistema operativo.
 
 ## 2. Alcance
 
 El sistema:
 
-- Procesa únicamente nuevas fechas no existentes en el Excel maestro.
-- No modifica registros históricos ya consolidados.
+- Procesa únicamente fechas nuevas respecto del Excel maestro.
+- No sobrescribe registros históricos.
 - No altera estructura de hojas existentes.
-- No crea nuevas hojas automáticamente.
-- No modifica fórmulas existentes (solo las replica hacia nuevas filas).
+- No crea hojas nuevas automáticamente.
+- Replica fórmulas existentes hacia filas nuevas.
 
----
+## 3. Componentes
 
-## 3. Arquitectura General
+- Entrypoint: `main.py`
+- Módulos: `utils/`, `excel/`, `web/`
+- Configuración: `config.json`
+- Scripts macOS: `setup_mac.sh`, `run.command`, `run_auto.command`
+- Ejecutable Windows: `dist\Grupo2000.exe`
+- Logs: `logs/last_run.log`
 
-El sistema está compuesto por:
+## 4. Modos de ejecución y comportamiento por plataforma
 
-- Script principal (`main.py`)
-- Módulos auxiliares (`utils/`, `excel/`, `web/`)
-- Configuración externa (`config.json`)
-- Entorno virtual Python (`.venv`)
-- Scripts de ejecución para macOS (`setup_mac.sh`, `run.command`)
-- Logs de ejecución (`logs/`)
+### 4.1 Parámetro de modo
 
----
+`main.py` acepta:
 
-## 4. Flujo Funcional
+- `--mode manual`
+- `--mode auto`
 
-### 4.1 Inicio del Proceso
+Si no se especifica, el modo por defecto es `manual`.
 
-1. Lectura de configuración desde `config.json`.
-2. Validación de credenciales.
-3. Validación de existencia del Excel maestro.
+### 4.2 Resolución de visibilidad del navegador
 
----
+- macOS + `manual`: navegador visible.
+- macOS + `auto`: navegador headless.
+- Windows: siempre visible (modo headless no aplicado).
 
-### 4.2 Extracción de Datos
+Implementación: detección con `platform.system()` y resolución de `HEADLESS` antes de inicializar Selenium.
 
-1. Inicio de sesión en la plataforma web.
-2. Descarga del dataset correspondiente.
-3. Validación de integridad del archivo descargado.
+### 4.3 Scheduler
 
----
+- macOS: scheduler por `cron`, apuntando a `run_auto.command`.
+- Windows: fuera de alcance del proyecto actual (solo ejecución manual).
 
-### 4.3 Conversión de Archivos
+## 5. Flujo funcional
 
-Si el archivo requiere conversión de formato:
+1. Carga de configuración (`config.json`).
+2. Inicialización de WebDriver con headless según modo/plataforma.
+3. Login en plataforma.
+4. Determinación incremental de rango de fechas por dataset.
+5. Descarga, lectura, validación y consolidación.
+6. Inserción en Excel maestro y estirado de fórmulas.
+7. Logout y cierre de navegador.
+8. Limpieza de temporales de descarga.
 
-- Se utiliza LibreOffice en modo headless.
-- Se detecta automáticamente el ejecutable (`libreoffice` o `soffice`).
-- En macOS se contempla la ruta estándar:
-  
-  /Applications/LibreOffice.app/Contents/MacOS/soffice
+## 6. Manejo global de errores y códigos de salida
 
----
+`main.py` encapsula el flujo principal y retorna:
 
-### 4.4 Procesamiento de Datos
+- Exit code `0` en éxito.
+- Exit code `1` en error.
 
-1. Lectura del dataset.
-2. Identificación de fechas ya existentes en el Excel maestro.
-3. Filtrado de registros nuevos.
-4. Preparación de estructura compatible con el Excel destino.
+Tipos de error contemplados:
 
----
+- Autenticación fallida.
+- Fórmulas array incompatibles en Excel maestro.
+- Errores inesperados.
 
-### 4.5 Actualización del Excel Maestro
+## 7. Notificaciones de fin de ejecución
 
-1. Apertura del archivo.
-2. Identificación de última fila con datos.
-3. Inserción de nuevas filas.
-4. Replicación de fórmulas hacia nuevas filas.
-5. Guardado del archivo actualizado.
+### 7.1 macOS
 
-Si no existen nuevas fechas:
+No se notifica desde `main.py`.
+La notificación se realiza en scripts `.command` mediante `say`, evaluando exit code.
 
-- El sistema finaliza sin modificaciones.
+### 7.2 Windows
 
----
+Desde `main.py` (sin dependencias externas):
 
-## 5. Reglas de Negocio
+- Éxito:
+  - `winsound.MessageBeep(MB_ICONASTERISK)`
+  - `MessageBoxW` informativo: "Proceso finalizado correctamente"
+- Error:
+  - `winsound.MessageBeep(MB_ICONHAND)`
+  - `MessageBoxW` error: "Error en la ejecución. Revisar log."
 
-- Solo se insertan registros con fechas no existentes.
-- El orden cronológico debe mantenerse.
-- No se sobrescriben filas existentes.
-- Las fórmulas deben existir en la última fila válida para poder replicarse.
-- No se permiten fórmulas tipo array en columnas que deben extenderse.
+Esto mejora accesibilidad para lector de pantalla al usar diálogo del sistema.
 
----
+## 8. Scripts operativos macOS
 
-## 6. Configuración
+### 8.1 `run.command` (manual)
 
-Archivo: `config.json`
+- Autoposiciona con `cd "$(dirname "$0")"`.
+- Crea `logs/` si no existe.
+- Ejecuta: `.venv/bin/python main.py --mode manual`
+- Redirige a `logs/last_run.log`.
+- Usa `say` según exit code.
 
-Contiene:
+### 8.2 `run_auto.command` (automático)
 
-- Credenciales de acceso.
-- Ruta absoluta del Excel maestro.
-- Parámetros necesarios para la conexión.
+- Misma estructura operativa.
+- Ejecuta: `.venv/bin/python main.py --mode auto`
+- Diseñado para uso en cron.
 
-Separar configuración del código permite:
+### 8.3 `setup_mac.sh`
 
-- Cambiar rutas sin modificar scripts.
-- Evitar hardcoding.
-- Facilitar despliegues en distintos equipos.
+- Mantiene creación de `.venv` e instalación de dependencias.
+- Da permisos de ejecución a `run.command` y `run_auto.command`.
+- Crea symlink en Escritorio solo a `run.command`.
 
----
-
-## 7. Scheduler (Automatización)
-
-En macOS se utiliza `cron` para ejecución programada.
-
-Ejemplo:
-
-0 8 * * * /bin/bash /Users/usuario/Grupo2000/run.command
-
-Esto permite ejecución diaria automática sin intervención manual.
-
-El sistema es idempotente:  
-Si no hay nuevos datos, no produce modificaciones.
-
----
-
-## 8. Manejo de Errores
-
-El sistema registra eventos en:
-
-logs/last_run.log
-
-Tipos de errores contemplados:
-
-- Fallo de autenticación.
-- Dataset inválido o corrupto.
-- LibreOffice no disponible.
-- Excel maestro inexistente.
-- Fórmulas tipo array no compatibles.
-- Errores inesperados de ejecución.
-
-Todos los errores quedan registrados para auditoría.
-
----
-
-## 9. Dependencias
-
-### 9.1 Software Externo
+## 9. Configuración y dependencias
 
 - Python 3
-- LibreOffice (modo headless)
+- LibreOffice (conversión de `.xls`)
+- Dependencias Python de `requirements.txt`
 
-### 9.2 Librerías Python
+## 10. Observabilidad
 
-Instaladas desde:
+Log principal:
 
-requirements.txt
+`logs/last_run.log`
 
-Gestionadas mediante entorno virtual `.venv`.
+Uso funcional:
 
----
+- Auditoría de ejecución.
+- Diagnóstico de fallos.
+- Trazabilidad operativa.
 
-## 10. Estructura del Proyecto
+## 11. Limitaciones conocidas
 
-Estructura simplificada:
-
-Grupo2000/
-│
-├── main.py
-├── config.json
-├── requirements.txt
-├── setup_mac.sh
-├── run.command
-├── .venv/
-├── logs/
-├── excel/
-├── utils/
-├── web/
-└── docs/
-
----
-
-## 11. Seguridad
-
-- Las credenciales se almacenan en `config.json`.
-- No se exponen en el código fuente.
-- El repositorio puede mantenerse privado.
-- Se recomienda restringir permisos del archivo `config.json`.
-
----
-
-## 12. Mantenimiento
-
-Recomendaciones:
-
-- Verificar logs periódicamente.
-- Mantener Python actualizado.
-- Actualizar dependencias cuando sea necesario.
-- No modificar manualmente la estructura del Excel maestro sin validar impacto.
-
----
-
-## 13. Limitaciones Conocidas
-
-- Dependencia de la estabilidad de la plataforma web.
+- Dependencia de estabilidad de plataforma web.
 - Dependencia de LibreOffice para conversiones.
-- Sensibilidad a cambios estructurales en el Excel maestro.
-- No soporta fórmulas array dinámicas en columnas extendibles.
+- Sensibilidad a cambios estructurales del Excel maestro.
+- No soporte de fórmulas array extendibles en columnas de inserción.
+- En Windows no se incluye scheduler en esta versión.
 
----
+## 12. Evolución sugerida
 
-## 14. Evolución Futura (Opcional)
-
-Posibles mejoras:
-
-- Migración a `launchd` en macOS.
-- Interfaz gráfica mínima.
-- Notificaciones por email ante errores.
-- Control de versiones del Excel maestro.
-- Validaciones adicionales de integridad de datos.
-
----
-
-## 15. Conclusión
-
-El sistema provee una solución automatizada, controlada y reproducible para la actualización del Excel maestro, reduciendo carga operativa y riesgo de errores manuales.
-
-Su diseño modular permite mantenimiento sencillo y adaptabilidad ante cambios futuros.
+- Migrar scheduler de macOS a `launchd` (opcional).
+- Canal adicional de alertas (email/Teams).
+- Validaciones de integridad adicionales previas a inserción.

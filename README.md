@@ -363,3 +363,25 @@ Opciones recomendadas:
 ## Estado del proyecto
 
 Proyecto preparado para fase de compilacion y pruebas en Windows y macOS.
+
+## Modos de ejecución
+
+### macOS
+
+- Manual: `run.command` (navegador visible)
+- Automático: `run_auto.command` (headless)
+- El sistema anuncia verbalmente el resultado al finalizar.
+
+Ejemplo de cron:
+
+```cron
+0 8 * * * /bin/bash /Users/usuario/Grupo2000/run_auto.command
+```
+
+### Windows
+
+- Ejecución manual del `.exe`
+- Al finalizar se mostrará:
+  - Popup de éxito o error
+  - Sonido típico del sistema
+- El lector de pantalla detectará el `MessageBox` automáticamente.

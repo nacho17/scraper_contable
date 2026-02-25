@@ -1,218 +1,191 @@
-# 📘 Manual de Usuario  
-## Sistema de Actualización Automática – Grupo2000
-
----
+# Manual de Usuario
+## Sistema de Actualización Automática - Grupo2000
 
 ## 1. Descripción General
 
 El sistema permite:
 
-- Descargar automáticamente el dataset desde la plataforma web.
-- Procesar la información.
-- Insertar los nuevos registros en el Excel maestro.
+- Descargar automáticamente datasets desde la plataforma web.
+- Procesar y normalizar la información.
+- Insertar registros nuevos en el Excel maestro.
 - Mantener actualizadas las fórmulas.
 - Generar logs de ejecución.
 
-El objetivo es que el Excel maestro se mantenga actualizado sin intervención manual.
-
----
+Objetivo: mantener el Excel maestro actualizado con mínima intervención manual.
 
 ## 2. Requisitos
 
-Antes de utilizar el sistema, asegúrese de tener:
+Antes de usar el sistema:
 
 - Python 3 instalado.
 - LibreOffice instalado.
 - Acceso a internet.
 - Archivo Excel maestro existente.
-
----
+- `config.json` completo con credenciales y rutas.
 
 ## 3. Instalación en macOS
 
-### Paso 1 – Clonar el repositorio
+### Paso 1 - Ubicar el proyecto
 
-Clonar el proyecto en una carpeta del equipo.
+Ejemplo de ruta:
 
-Ejemplo:
+`/Users/usuario/Grupo2000`
 
-/Users/usuario/Grupo2000
+### Paso 2 - Configurar credenciales
 
----
-
-### Paso 2 – Configurar credenciales
-
-Editar el archivo:
-
-config.json
-
-Completar:
+Editar `config.json` y completar:
 
 - Usuario
 - Contraseña
 - Ruta completa del Excel maestro
 
-Guardar los cambios.
+### Paso 3 - Ejecutar instalador
 
----
+Desde la carpeta del proyecto:
 
-### Paso 3 – Ejecutar el script de instalación
-
-Desde la carpeta del proyecto ejecutar:
-
-bash setup_mac.sh
+```bash
+./setup_mac.sh
+```
 
 Este proceso:
 
-- Verifica Python
-- Verifica LibreOffice
-- Crea el entorno virtual
-- Instala dependencias
-- Crea un acceso directo en el Escritorio
+- Verifica Python.
+- Verifica LibreOffice.
+- Crea `.venv` si no existe.
+- Instala dependencias.
+- Da permisos a `run.command` y `run_auto.command`.
+- Crea acceso directo en Escritorio solo para ejecución manual (`~/Desktop/Grupo2000.command`).
 
----
+## 4. Modos de ejecución
 
-### Paso 4 – Ejecutar el sistema
+### macOS
 
-En el Escritorio se crea el archivo:
+- Manual (visible): `run.command`
+- Automático (headless): `run_auto.command`
 
-Grupo2000.command
+En ambos casos, al finalizar se anuncia verbalmente:
 
-Para ejecutar el sistema:
+- Éxito: "Grupo 2000 finalizado correctamente"
+- Error: "Error en la ejecución. Revisar log."
 
-- Hacer doble clic sobre ese archivo.
+### Windows
 
----
+- Ejecución manual del ejecutable: `dist\Grupo2000.exe`
+- No se configura scheduler en Windows dentro del alcance actual.
 
-## 4. Programación automática (Scheduler)
+Al finalizar la ejecución en Windows:
 
-Si se desea ejecución automática diaria:
+- Se reproduce sonido del sistema.
+- Se muestra popup (`MessageBox`) de éxito o error.
+- El lector de pantalla detecta ese popup automáticamente.
+
+## 5. Ejecución manual
+
+### macOS
+
+Desde Terminal:
+
+```bash
+./run.command
+```
+
+O con doble clic en `~/Desktop/Grupo2000.command`.
+
+### Windows
+
+Desde PowerShell o CMD, en la carpeta `dist`:
+
+```powershell
+.\Grupo2000.exe
+```
+
+## 6. Programación automática en macOS (cron)
+
+Para ejecución diaria automática:
 
 1. Abrir Terminal.
 2. Ejecutar:
 
+```bash
 crontab -e
+```
 
-3. Agregar una línea similar a:
+3. Agregar una línea como ejemplo:
 
-0 8 * * * /bin/bash /Users/usuario/Grupo2000/run.command
+```cron
+0 8 * * * /bin/bash /Users/usuario/Grupo2000/run_auto.command
+```
 
-Esto ejecutará el sistema todos los días a las 08:00.
+4. Guardar y verificar:
 
-Guardar y cerrar.
-
-Para verificar:
-
+```bash
 crontab -l
+```
 
----
+Importante: usar `run_auto.command` para evitar navegador visible en ejecuciones automáticas.
 
-## 5. Funcionamiento general
+## 7. Logs y seguimiento
 
-Cuando el sistema se ejecuta:
+Log principal:
 
-1. Inicia sesión en la plataforma web.
-2. Descarga el dataset.
-3. Convierte archivos si es necesario (requiere LibreOffice).
-4. Inserta nuevos registros en el Excel maestro.
-5. Estira las fórmulas.
-6. Guarda el archivo actualizado.
+`logs/last_run.log`
 
-Si no hay nuevas fechas para procesar, el sistema finaliza sin modificar el Excel.
-
----
-
-## 6. Logs y seguimiento
-
-Los logs se almacenan en:
-
-logs/last_run.log
-
-Allí se puede verificar:
+Permite revisar:
 
 - Errores
-- Procesos ejecutados
-- Mensajes informativos
+- Pasos ejecutados
+- Mensajes de diagnóstico
 
----
-
-## 7. Manejo de Errores
+## 8. Manejo de Errores
 
 ### Error de autenticación
 
 Mensaje:
 
-ERROR: Problema de autenticación. Revise usuario/contraseña en config.json.
+`ERROR: Problema de autenticación. Revise usuario/contraseña en config.json.`
 
-Solución:
+Acción:
 
-1. Abrir config.json.
-2. Verificar usuario y contraseña.
-3. Guardar.
-4. Ejecutar nuevamente.
+1. Revisar usuario/contraseña en `config.json`.
+2. Guardar.
+3. Ejecutar nuevamente.
 
----
+### LibreOffice no disponible
 
-### LibreOffice no instalado
+Se registra en log cuando no se puede convertir `.xls`.
 
-Mensaje en log:
-
-LibreOffice no está instalado o no está en el PATH.
-
-Solución:
-
-- Instalar LibreOffice.
-- Volver a ejecutar el sistema.
-
----
+Acción: instalar/verificar LibreOffice y reintentar.
 
 ### Excel maestro no encontrado
 
 Mensaje:
 
-No se encontró el archivo: [ruta]
+`No se encontró el archivo: [ruta]`
 
-Solución:
+Acción: verificar ruta configurada en `config.json`.
 
-- Verificar que el archivo exista.
-- Confirmar que la ruta en config.json sea correcta.
+### Fórmulas tipo array en Excel maestro
 
----
+La ejecución falla si hay fórmulas array (`{}`) en columnas donde el sistema debe estirar fórmulas.
 
-### Error con fórmulas tipo Array
+Acción:
 
-Si el Excel maestro contiene fórmulas tipo array (entre llaves `{}`) en las columnas donde el sistema debe estirar fórmulas, la ejecución fallará.
+1. Abrir Excel maestro.
+2. Corregir esas fórmulas en la última fila aplicable.
+3. Guardar.
+4. Ejecutar nuevamente.
 
-Mensaje:
+## 9. Recomendaciones
 
-No se pueden estirar formulas tipo array en el Excel maestro.
+- No editar manualmente las últimas filas mientras corre el sistema.
+- Evitar fórmulas array en columnas extendibles.
+- Revisar periódicamente `logs/last_run.log`.
+- Mantener credenciales actualizadas.
 
-Solución:
+## 10. Soporte
 
-1. Abrir el Excel maestro.
-2. Verificar la última fila de la hoja destino.
-3. Eliminar fórmulas tipo array en las columnas afectadas.
-4. Guardar el archivo.
-5. Ejecutar nuevamente.
+Ante incidentes:
 
-Importante:  
-Este problema depende del estado del Excel. Una vez corregido, no debería repetirse.
-
----
-
-## 8. Recomendaciones
-
-- No modificar manualmente las últimas filas del Excel mientras el sistema esté en uso.
-- No utilizar fórmulas array en columnas donde se insertan datos automáticamente.
-- Verificar periódicamente el archivo de log.
-- Mantener actualizadas las credenciales si cambian.
-
----
-
-## 9. Soporte
-
-Ante cualquier inconveniente:
-
-- Revisar primero el archivo de log.
-- Confirmar que los requisitos estén instalados.
-- Contactar al proveedor del sistema indicando el mensaje de error completo.
+1. Revisar `logs/last_run.log`.
+2. Confirmar requisitos instalados.
+3. Reportar el error completo al equipo de soporte.
