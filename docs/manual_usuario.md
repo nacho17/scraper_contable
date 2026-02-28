@@ -1,4 +1,4 @@
-# Manual de Usuario
+﻿# Manual de Usuario
 ## Sistema de Actualización Automática - Grupo2000
 
 ## 1. Descripción General
@@ -20,7 +20,7 @@ Antes de usar el sistema:
 - Python 3 instalado.
 - LibreOffice instalado.
 - Acceso a internet.
-- Archivo Excel maestro existente.
+- Archivos Excel maestro existentes (uno por usuario configurado).
 - `config.json` completo con credenciales y rutas.
 
 ## 3. Instalación en macOS
@@ -35,9 +35,11 @@ Ejemplo de ruta:
 
 Editar `config.json` y completar:
 
-- Usuario
-- Contraseña
-- Ruta completa del Excel maestro
+- Usuario (`usuarios[].nombre`)
+- Contraseña (`usuarios[].password`)
+- Ruta completa del Excel maestro por usuario (`usuarios[].maestro_path`)
+
+Si se configuran múltiples usuarios, cada uno debe tener su propio `maestro_path`.
 
 ### Paso 3 - Ejecutar instalador
 
@@ -136,6 +138,17 @@ Permite revisar:
 - Pasos ejecutados
 - Mensajes de diagnóstico
 
+## 7.1 Chequeo/Fix de formato de datasets
+
+Antes de insertar datos en el Excel maestro, el sistema normaliza y valida cada dataset:
+
+- Convierte fechas a formato fecha real.
+- Ordena filas por fecha.
+- Convierte importes a numérico.
+- Registra en log cuántas fechas/importes inválidos detectó.
+
+Esto evita que formatos inconsistentes lleguen al maestro sin control.
+
 ## 8. Manejo de Errores
 
 ### Error de autenticación
@@ -162,7 +175,7 @@ Mensaje:
 
 `No se encontró el archivo: [ruta]`
 
-Acción: verificar ruta configurada en `config.json`.
+Acción: verificar `usuarios[].maestro_path` del usuario que se está procesando en `config.json`.
 
 ### Fórmulas tipo array en Excel maestro
 

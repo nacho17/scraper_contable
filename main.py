@@ -215,7 +215,6 @@ def main_proceso(mode="manual"):
     config = cargar_config()
     logger = setup_logger()
 
-    maestro_path = config["excel"]["maestro_path"]
     fecha_inicial_str = config["procesamiento"]["fecha_inicial_si_vacio"]
 
     fecha_inicial_config = datetime.strptime(
@@ -233,6 +232,7 @@ def main_proceso(mode="manual"):
     driver = iniciar_driver(download_dir, headless=headless)
 
     for usuario in usuarios:
+        maestro_path = usuario["maestro_path"]
         logger.info("Procesando usuario: %s", usuario["nombre"])
 
         login(
@@ -292,7 +292,7 @@ def main_proceso(mode="manual"):
             logger.info("%s", resumen)
 
             resultado_insert = append_dataframe_to_excel(
-                maestro_path=config["excel"]["maestro_path"],
+                maestro_path=maestro_path,
                 hoja_destino=dataset["hoja_destino"],
                 df=df_final,
                 columna_inicio=dataset["columna_inicio"]
@@ -300,7 +300,7 @@ def main_proceso(mode="manual"):
 
             if dataset["tiene_formulas"]:
                 estirar_formulas(
-                    maestro_path=config["excel"]["maestro_path"],
+                    maestro_path=maestro_path,
                     hoja_destino=dataset["hoja_destino"],
                     fila_inicio=resultado_insert["fila_inicio"],
                     filas_insertadas=resultado_insert["filas_insertadas"]

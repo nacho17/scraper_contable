@@ -122,3 +122,91 @@ def test_procesar_dataset_rango_invalido_devuelve_none(monkeypatch):
     )
 
     assert resultado is None
+
+
+def test_main_proceso_usa_maestro_path_por_usuario(monkeypatch):
+    config = {
+        "web": {
+            "login_url": "https://example.com/login",
+            "logout_url": "https://example.com/logout",
+        },
+        "paths": {
+            "download_dir": "downloads_temp",
+            "procesados_dir": "procesados",
+        },
+        "procesamiento": {
+            "fecha_inicial_si_vacio": "2025-01-01",
+        },
+        "usuarios": [
+            {
+                "nombre": "USR1",
+                "username": "u1",
+                "password": "p1",
+                "maestro_path": "C:/maestros/usr1.xlsx",
+            },
+            {
+                "nombre": "USR2",
+                "username": "u2",
+                "password": "p2",
+                "maestro_path": "C:/maestros/usr2.xlsx",
+            },
+        ],
+        "datasets": [
+            {
+                "nombre": "FACTURADOS",
+                "hoja_destino": "facturadosok",
+                "columna_inicio": 1,
+                "columna_fecha": "Fecha",
+                "columnas_importe": ["Total"],
+                "tiene_formulas": False,
+                "url": "https://example.com/facturados",
+            }
+        ],
+    }
+
+    class DummyDriver:
+        def quit(self):
+            return None
+
+    estado = {"usuario_actual": None}
+    maestro_paths_procesar = []
+    maestro_paths_append = []
+
+    monkeypatch.setattr(main, "cargar_config", lambda: config)
+    monkeypatch.setattr(main, "setup_logger", lambda: logging.getLogger("test"))
+    monkeypatch.setattr(main, "iniciar_driver", lambda *args, **kwargs: DummyDriver())
+
+    def fake_login(driver, login_url, username, password):
+        for usr in config["usuarios"]:
+            if usr["username"] == username:
+                estado["usuario_actual"] = usr["nombre"]
+                return
+        raise AssertionError("Usuario inesperado en login")
+
+    monkeypatch.setattr(main, "login", fake_login)
+    monkeypatch.setattr(main, "logout", lambda *args, **kwargs: None)
+
+    def fake_procesar_dataset(maestro_path, dataset_config, fecha_inicial_config, logger):
+        maestro_paths_procesar.append(maestro_path)
+        return date(2026, 1, 1), date(2026, 1, 2)
+
+    monkeypatch.setattr(main, "procesar_dataset", fake_procesar_dataset)
+
+    def fake_descargar(*args, **kwargs):
+        df = pd.DataFrame([["01/01/2026", "100,00"]], columns=["Fecha", "Total"])
+        return estado["usuario_actual"], df
+
+    monkeypatch.setattr(main, "descargar_y_leer_dataset", fake_descargar)
+    monkeypatch.setattr(main, "normalizar_y_validar_dataset", lambda df, *args, **kwargs: (df, {}))
+
+    def fake_append(maestro_path, hoja_destino, df, columna_inicio):
+        maestro_paths_append.append(maestro_path)
+        return {"fila_inicio": 2, "filas_insertadas": len(df)}
+
+    monkeypatch.setattr(main, "append_dataframe_to_excel", fake_append)
+
+    salida = main.main_proceso(mode="manual")
+
+    assert salida == config["paths"]["download_dir"]
+    assert maestro_paths_procesar == ["C:/maestros/usr1.xlsx", "C:/maestros/usr2.xlsx"]
+    assert maestro_paths_append == ["C:/maestros/usr1.xlsx", "C:/maestros/usr2.xlsx"]

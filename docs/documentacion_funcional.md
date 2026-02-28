@@ -1,4 +1,4 @@
-# Documentación Funcional
+﻿# Documentación Funcional
 ## Sistema de Actualización Automática - Grupo2000
 
 ## 1. Objetivo del Sistema
@@ -7,7 +7,7 @@ Automatizar:
 
 - Descarga de datos desde plataforma web.
 - Procesamiento y transformación de archivos.
-- Actualización incremental de Excel maestro.
+- Actualización incremental de Excel maestro por usuario.
 - Extensión de fórmulas.
 - Ejecución manual y automática según sistema operativo.
 
@@ -15,7 +15,7 @@ Automatizar:
 
 El sistema:
 
-- Procesa únicamente fechas nuevas respecto del Excel maestro.
+- Procesa únicamente fechas nuevas respecto del Excel maestro de cada usuario.
 - No sobrescribe registros históricos.
 - No altera estructura de hojas existentes.
 - No crea hojas nuevas automáticamente.
@@ -58,12 +58,25 @@ Implementación: detección con `platform.system()` y resolución de `HEADLESS` 
 
 1. Carga de configuración (`config.json`).
 2. Inicialización de WebDriver con headless según modo/plataforma.
-3. Login en plataforma.
-4. Determinación incremental de rango de fechas por dataset.
-5. Descarga, lectura, validación y consolidación.
-6. Inserción en Excel maestro y estirado de fórmulas.
-7. Logout y cierre de navegador.
-8. Limpieza de temporales de descarga.
+3. Iteración por usuario configurado (`usuarios[]`), usando su `maestro_path`.
+4. Login en plataforma.
+5. Determinación incremental de rango de fechas por dataset (contra el maestro del usuario actual).
+6. Descarga, lectura, validación y consolidación.
+7. Chequeo/fix de formato del dataset (normalización de fechas/importes y orden por fecha).
+8. Inserción en Excel maestro y estirado de fórmulas.
+9. Logout y cierre de navegador.
+10. Limpieza de temporales de descarga.
+
+## 5.1 Normalización y validación de formato de datasets
+
+Antes de insertar en Excel, el sistema aplica un paso de chequeo/fix de formato:
+
+- Convierte la columna fecha a `datetime` con `dayfirst=True` y tolerancia a valores inválidos.
+- Marca y contabiliza fechas inválidas en el resumen.
+- Ordena el dataset por fecha.
+- Convierte columnas de importe a tipo numérico y contabiliza valores inválidos por columna.
+
+Este paso está implementado en `utils/converter.py` (`normalizar_y_validar_dataset`).
 
 ## 6. Manejo global de errores y códigos de salida
 

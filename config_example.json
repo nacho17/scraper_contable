@@ -7,9 +7,6 @@
     "download_dir": "downloads_temp",
     "procesados_dir": "procesados"
   },
-  "excel": {
-    "maestro_path": "C:\\Users\\TU_USUARIO\\Documents\\ExcelMaestro.xlsx"
-  },
   "procesamiento": {
     "fecha_inicial_si_vacio": "2025-01-01"
   },
@@ -17,7 +14,8 @@
     {
       "nombre": "USUARIO_EJEMPLO",
       "username": "USERNAME_EJEMPLO",
-      "password": "PASSWORD_EJEMPLO"
+      "password": "PASSWORD_EJEMPLO",
+      "maestro_path": "C:\\Users\\TU_USUARIO\\Documents\\ExcelMaestro_USUARIO_EJEMPLO.xlsx"
     }
   ],
   "datasets": [
