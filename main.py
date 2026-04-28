@@ -4,24 +4,28 @@ import json
 import os
 import platform
 import sys
-import pandas as pd
 from datetime import datetime, timedelta
+
+import pandas as pd
+
 from excel.updater import (
     MasterExcelArrayFormulaError,
     append_dataframe_to_excel,
     estirar_formulas,
 )
-from utils.logger import setup_logger
 from utils.converter import normalizar_y_validar_dataset
 from utils.dates import dividir_en_bloques
+from utils.logger import setup_logger
+from utils.reader import leer_archivo_descargado, mover_y_renombrar, esperar_descarga_completa
 from web.downloader import (
     AuthenticationError,
+    DownloadBlockedError,
+    SiteUnavailableError,
+    exportar_dataset,
     iniciar_driver,
     login,
     logout,
-    exportar_dataset,
 )
-from utils.reader import leer_archivo_descargado, mover_y_renombrar, esperar_descarga_completa
 
 
 def cargar_config(path="config.json"):
@@ -34,38 +38,33 @@ def obtener_ultima_fecha(maestro_path, hoja_1, columna_fecha):
         df = pd.read_excel(
             maestro_path,
             sheet_name=hoja_1,
-            engine="openpyxl"
+            engine="openpyxl",
         )
-    except FileNotFoundError:
-        raise Exception(f"No se encontró el archivo: {maestro_path}")
+    except FileNotFoundError as exc:
+        raise Exception(f"No se encontró el archivo: {maestro_path}") from exc
 
     if columna_fecha not in df.columns:
         raise Exception(f"La columna '{columna_fecha}' no existe en la hoja '{hoja_1}'")
 
-    # Convertir a datetime de forma segura
     df[columna_fecha] = pd.to_datetime(
         df[columna_fecha],
         dayfirst=True,
-        errors="coerce"
+        errors="coerce",
     )
 
-    # Eliminar fechas inválidas o vacías
     df_valid = df[df[columna_fecha].notna()]
 
     if df_valid.empty:
         return None
 
-    # Tomar la fecha máxima
-    ultima_fecha = df_valid[columna_fecha].max()
-
-    return ultima_fecha
+    return df_valid[columna_fecha].max()
 
 
 def procesar_dataset(
     maestro_path,
     dataset_config,
     fecha_inicial_config,
-    logger
+    logger,
 ):
     nombre = dataset_config["nombre"]
     hoja_destino = dataset_config["hoja_destino"]
@@ -76,7 +75,7 @@ def procesar_dataset(
     ultima_fecha = obtener_ultima_fecha(
         maestro_path,
         hoja_destino,
-        columna_fecha
+        columna_fecha,
     )
 
     if ultima_fecha is None:
@@ -92,15 +91,11 @@ def procesar_dataset(
     logger.info("Fecha desde: %s", fecha_desde)
     logger.info("Fecha hasta: %s", fecha_hasta)
 
-    if fecha_desde == fecha_hasta:
-        logger.info("No hay nuevas fechas para procesar.")
-        return None
-
     if fecha_desde > fecha_hasta:
         logger.warning(
             "Rango inválido: fecha_desde (%s) es mayor que fecha_hasta (%s). No se procesará ningún dataset.",
             fecha_desde,
-            fecha_hasta
+            fecha_hasta,
         )
         return None
 
@@ -115,7 +110,7 @@ def descargar_y_leer_dataset(
     fecha_hasta,
     ruta_descargas,
     procesados_dir,
-    logger
+    logger,
 ):
     bloques = dividir_en_bloques(fecha_desde, fecha_hasta)
 
@@ -131,7 +126,7 @@ def descargar_y_leer_dataset(
             driver,
             dataset["url"],
             sub_desde,
-            sub_hasta
+            sub_hasta,
         )
 
         ultimo_archivo = esperar_descarga_completa(ruta_descargas, archivos_antes)
@@ -145,20 +140,18 @@ def descargar_y_leer_dataset(
         if usuario_detectado is None:
             usuario_detectado = usuario_archivo
 
-        # Validación de coherencia
         if usuario_archivo != usuario_detectado:
             raise Exception("Inconsistencia en usuario detectado")
 
         dfs.append(df_nuevo)
 
-        # Guardar archivo para trazabilidad
         nuevo_path = mover_y_renombrar(
             ultimo_archivo,
             procesados_dir,
             dataset["nombre"],
             usuario_archivo,
             sub_desde,
-            sub_hasta
+            sub_hasta,
         )
 
         logger.info("Movido a: %s", nuevo_path)
@@ -219,12 +212,13 @@ def main_proceso(mode="manual"):
 
     fecha_inicial_config = datetime.strptime(
         fecha_inicial_str,
-        "%Y-%m-%d"
+        "%Y-%m-%d",
     ).date()
 
     usuarios = config["usuarios"]
     datasets = config["datasets"]
     web_config = config["web"]
+    login_retries = web_config.get("login_retries", 3)
 
     download_dir = config["paths"]["download_dir"]
     headless = resolver_headless(mode)
@@ -239,7 +233,8 @@ def main_proceso(mode="manual"):
             driver,
             web_config["login_url"],
             usuario["username"],
-            usuario["password"]
+            usuario["password"],
+            max_retries=login_retries,
         )
 
         for dataset in datasets:
@@ -247,7 +242,7 @@ def main_proceso(mode="manual"):
                 maestro_path,
                 dataset,
                 fecha_inicial_config,
-                logger
+                logger,
             )
 
             if rango is None:
@@ -262,28 +257,26 @@ def main_proceso(mode="manual"):
                 fecha_hasta,
                 download_dir,
                 config["paths"]["procesados_dir"],
-                logger
+                logger,
             )
 
             if df_final is None or df_final.empty:
                 logger.info(
                     "%s -> No hay fechas nuevas para procesar.",
-                    dataset["nombre"]
+                    dataset["nombre"],
                 )
                 continue
 
-            # Validar usuario
             if usuario_archivo != usuario["nombre"]:
                 raise Exception(
-                    f"El archivo pertenece a {usuario_archivo} "
-                    f"pero se esperaba {usuario['nombre']}"
+                    f"El archivo pertenece a {usuario_archivo} pero se esperaba {usuario['nombre']}"
                 )
 
             df_final, resumen = normalizar_y_validar_dataset(
                 df_final,
                 dataset["columna_fecha"],
                 dataset["columnas_importe"],
-                logger=logger
+                logger=logger,
             )
 
             logger.info("Archivo válido para usuario %s", usuario_archivo)
@@ -295,7 +288,7 @@ def main_proceso(mode="manual"):
                 maestro_path=maestro_path,
                 hoja_destino=dataset["hoja_destino"],
                 df=df_final,
-                columna_inicio=dataset["columna_inicio"]
+                columna_inicio=dataset["columna_inicio"],
             )
 
             if dataset["tiene_formulas"]:
@@ -303,15 +296,14 @@ def main_proceso(mode="manual"):
                     maestro_path=maestro_path,
                     hoja_destino=dataset["hoja_destino"],
                     fila_inicio=resultado_insert["fila_inicio"],
-                    filas_insertadas=resultado_insert["filas_insertadas"]
+                    filas_insertadas=resultado_insert["filas_insertadas"],
                 )
 
-            # Log interno
             logger.info(
                 "%s -> %s filas insertadas desde fila %s",
                 dataset["nombre"],
                 resultado_insert["filas_insertadas"],
-                resultado_insert["fila_inicio"]
+                resultado_insert["fila_inicio"],
             )
 
         logout(driver, web_config["logout_url"])
@@ -339,6 +331,16 @@ if __name__ == "__main__":
     except AuthenticationError:
         logger.error("Error de autenticación: verifique usuario y contraseña en config.json")
         print("ERROR: Problema de autenticación. Revise usuario/contraseña en config.json.")
+        notificar_windows(success=False)
+        sys.exit(1)
+    except SiteUnavailableError as exc:
+        logger.error("Error de disponibilidad del sitio: %s", exc)
+        print("ERROR: La web no responde o está caída. Revise el archivo de log para más detalles.")
+        notificar_windows(success=False)
+        sys.exit(1)
+    except DownloadBlockedError as exc:
+        logger.error("Descarga bloqueada por Chrome: %s", exc)
+        print("ERROR: Chrome bloqueó la descarga automática. Revise el archivo de log para más detalles.")
         notificar_windows(success=False)
         sys.exit(1)
     except MasterExcelArrayFormulaError as exc:

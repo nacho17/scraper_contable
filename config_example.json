@@ -1,7 +1,8 @@
 {
   "web": {
     "login_url": "https://example.com/Grupo2000/index.php?r=site/login",
-    "logout_url": "https://example.com/Grupo2000/index.php?r=site/logout"
+    "logout_url": "https://example.com/Grupo2000/index.php?r=site/logout",
+    "login_retries": 3
   },
   "paths": {
     "download_dir": "downloads_temp",

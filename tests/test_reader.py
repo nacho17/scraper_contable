@@ -3,7 +3,13 @@
 import pandas as pd
 import pytest
 
-from utils.reader import leer_archivo_descargado, mover_y_renombrar, esperar_descarga_completa
+from utils.reader import (
+    _hay_indicio_descarga_bloqueada,
+    esperar_descarga_completa,
+    leer_archivo_descargado,
+    mover_y_renombrar,
+)
+from web.downloader import DownloadBlockedError
 
 
 def test_leer_archivo_descargado_desde_xlsx(tmp_path):
@@ -49,3 +55,16 @@ def test_mover_y_renombrar_mueve_y_nombra_archivo(tmp_path):
 def test_esperar_descarga_completa_timeout_en_directorio_vacio(tmp_path):
     with pytest.raises(TimeoutError):
         esperar_descarga_completa(str(tmp_path), set(), timeout=1)
+
+
+def test_detecta_descarga_bloqueada_por_archivo_unconfirmed():
+    assert _hay_indicio_descarga_bloqueada({"Unconfirmed 12345.crdownload"}) is True
+    assert _hay_indicio_descarga_bloqueada({"archivo.xls"}) is False
+
+
+def test_esperar_descarga_completa_identifica_bloqueo_de_chrome(tmp_path):
+    archivo_bloqueado = tmp_path / "Unconfirmed 12345.crdownload"
+    archivo_bloqueado.write_text("bloqueado", encoding="utf-8")
+
+    with pytest.raises(DownloadBlockedError):
+        esperar_descarga_completa(str(tmp_path), set(), timeout=0)

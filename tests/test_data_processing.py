@@ -124,6 +124,31 @@ def test_procesar_dataset_rango_invalido_devuelve_none(monkeypatch):
     assert resultado is None
 
 
+def test_procesar_dataset_permite_un_dia_pendiente(monkeypatch):
+    class FixedDateTime(datetime):
+        @classmethod
+        def today(cls):
+            return cls(2026, 4, 27)
+
+    monkeypatch.setattr(main, "datetime", FixedDateTime)
+    monkeypatch.setattr(main, "obtener_ultima_fecha", lambda *args, **kwargs: datetime(2026, 4, 25))
+
+    dataset = {
+        "nombre": "FACTURADOS",
+        "hoja_destino": "Datos",
+        "columna_fecha": "fecha",
+    }
+
+    resultado = main.procesar_dataset(
+        maestro_path="dummy.xlsx",
+        dataset_config=dataset,
+        fecha_inicial_config=date(2025, 1, 1),
+        logger=logging.getLogger("test"),
+    )
+
+    assert resultado == (date(2026, 4, 26), date(2026, 4, 26))
+
+
 def test_main_proceso_usa_maestro_path_por_usuario(monkeypatch):
     config = {
         "web": {
@@ -176,10 +201,11 @@ def test_main_proceso_usa_maestro_path_por_usuario(monkeypatch):
     monkeypatch.setattr(main, "setup_logger", lambda: logging.getLogger("test"))
     monkeypatch.setattr(main, "iniciar_driver", lambda *args, **kwargs: DummyDriver())
 
-    def fake_login(driver, login_url, username, password):
+    def fake_login(driver, login_url, username, password, max_retries):
         for usr in config["usuarios"]:
             if usr["username"] == username:
                 estado["usuario_actual"] = usr["nombre"]
+                assert max_retries == 3
                 return
         raise AssertionError("Usuario inesperado en login")
 

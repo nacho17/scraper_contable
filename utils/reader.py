@@ -4,6 +4,7 @@ import shutil
 import pandas as pd
 import logging
 from utils.converter import convertir_xls_a_xlsx
+from web.downloader import DownloadBlockedError
 
 
 logger = logging.getLogger("scraper_contable")
@@ -54,7 +55,7 @@ def mover_y_renombrar(path_original, carpeta_destino,
     return nuevo_path
 
 
-def esperar_descarga_completa(download_dir, archivos_antes, timeout=180):
+def esperar_descarga_completa(download_dir, archivos_antes, timeout=480):
     segundos = 0
 
     while segundos < timeout:
@@ -87,4 +88,21 @@ def esperar_descarga_completa(download_dir, archivos_antes, timeout=180):
 
         segundos += 1
 
+    archivos_actuales = set(os.listdir(download_dir)) - archivos_antes
+    if _hay_indicio_descarga_bloqueada(archivos_actuales):
+        raise DownloadBlockedError(
+            "Chrome dejó una descarga incompleta o sin confirmar. Posible bloqueo de seguridad."
+        )
+
     raise TimeoutError("La descarga no se complet? en el tiempo esperado.")
+
+
+def _hay_indicio_descarga_bloqueada(archivos):
+    for archivo in archivos:
+        nombre = archivo.lower()
+        if nombre.endswith(".crdownload") and "unconfirmed" in nombre:
+            return True
+        if nombre.endswith(".crdownload") and "sin confirmar" in nombre:
+            return True
+
+    return False
