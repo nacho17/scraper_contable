@@ -7,10 +7,12 @@ import sys
 from datetime import datetime, timedelta
 
 import pandas as pd
+from openpyxl import load_workbook
 
 from excel.updater import (
     MasterExcelArrayFormulaError,
     append_dataframe_to_excel,
+    ensure_sheet_exists_with_headers,
     estirar_formulas,
 )
 from utils.converter import normalizar_y_validar_dataset
@@ -42,6 +44,10 @@ def obtener_ultima_fecha(maestro_path, hoja_1, columna_fecha):
         )
     except FileNotFoundError as exc:
         raise Exception(f"No se encontró el archivo: {maestro_path}") from exc
+    except ValueError as exc:
+        if "Worksheet named" in str(exc) and "not found" in str(exc):
+            return None
+        raise
 
     if columna_fecha not in df.columns:
         raise Exception(f"La columna '{columna_fecha}' no existe en la hoja '{hoja_1}'")
@@ -60,6 +66,15 @@ def obtener_ultima_fecha(maestro_path, hoja_1, columna_fecha):
     return df_valid[columna_fecha].max()
 
 
+def hoja_existe_en_maestro(maestro_path, hoja):
+    try:
+        wb = load_workbook(maestro_path, read_only=True)
+    except FileNotFoundError as exc:
+        raise Exception(f"No se encontrÃ³ el archivo: {maestro_path}") from exc
+
+    return hoja in wb.sheetnames
+
+
 def procesar_dataset(
     maestro_path,
     dataset_config,
@@ -71,6 +86,7 @@ def procesar_dataset(
     columna_fecha = dataset_config["columna_fecha"]
 
     logger.info("Procesando dataset: %s", nombre)
+    hoja_existia = hoja_existe_en_maestro(maestro_path, hoja_destino)
 
     ultima_fecha = obtener_ultima_fecha(
         maestro_path,
@@ -79,7 +95,13 @@ def procesar_dataset(
     )
 
     if ultima_fecha is None:
-        logger.warning("Archivo vacío o sin fechas válidas.")
+        if not hoja_existia:
+            logger.warning(
+                "La hoja '%s' no existe en el maestro. Se usará fecha_inicial_si_vacio.",
+                hoja_destino,
+            )
+        else:
+            logger.warning("Archivo vacío o sin fechas válidas.")
         fecha_desde = fecha_inicial_config
     else:
         logger.info("Última fecha encontrada: %s", ultima_fecha.date())
@@ -283,6 +305,19 @@ def main_proceso(mode="manual"):
             logger.info("Total filas unificadas: %s", len(df_final))
             logger.info("Resumen de validaciones:")
             logger.info("%s", resumen)
+
+            hoja_creada = ensure_sheet_exists_with_headers(
+                maestro_path=maestro_path,
+                hoja_destino=dataset["hoja_destino"],
+                headers=list(df_final.columns),
+                columna_inicio=dataset["columna_inicio"],
+            )
+
+            if hoja_creada:
+                logger.info(
+                    "Se creó la hoja '%s' con encabezados tomados del dataset.",
+                    dataset["hoja_destino"],
+                )
 
             resultado_insert = append_dataframe_to_excel(
                 maestro_path=maestro_path,

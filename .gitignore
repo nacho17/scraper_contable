@@ -223,3 +223,5 @@ build/mac/*
 
 # Ignore config.json files that may contain sensitive information, but keep the template if it exists
 config.json
+
+.vscode

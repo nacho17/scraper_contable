@@ -1,10 +1,32 @@
-﻿from openpyxl import load_workbook
-from openpyxl.formula.translate import Translator
 from copy import copy
+
+from openpyxl import load_workbook
+from openpyxl.formula.translate import Translator
 
 
 class MasterExcelArrayFormulaError(Exception):
     pass
+
+
+def ensure_sheet_exists_with_headers(
+    maestro_path,
+    hoja_destino,
+    headers,
+    columna_inicio,
+):
+    wb = load_workbook(maestro_path)
+
+    if hoja_destino in wb.sheetnames:
+        return False
+
+    ws = wb.create_sheet(title=hoja_destino)
+
+    for offset, header in enumerate(headers, start=0):
+        ws.cell(row=1, column=columna_inicio + offset, value=header)
+
+    wb.save(maestro_path)
+
+    return True
 
 
 def append_dataframe_to_excel(
@@ -30,7 +52,7 @@ def append_dataframe_to_excel(
         ultima_fila -= 1
 
     fila_inicio_insercion = ultima_fila + 1
-    fila_base = ultima_fila  # fila de la cual copiamos formato
+    fila_base = ultima_fila if ultima_fila > 1 else None
 
     # Insertar datos
     for i, row in enumerate(df.itertuples(index=False), start=0):
@@ -42,13 +64,15 @@ def append_dataframe_to_excel(
                 value=value
             )
 
-            # Copiar formato desde fila base
-            celda_base = ws.cell(
-                row=fila_base,
-                column=columna_inicio + j
-            )
+            # Copiar formato desde la ultima fila de datos si existe
+            celda_base = None
+            if fila_base is not None:
+                celda_base = ws.cell(
+                    row=fila_base,
+                    column=columna_inicio + j
+                )
 
-            if celda_base.has_style:
+            if celda_base is not None and celda_base.has_style:
                 nueva_celda.font = copy(celda_base.font)
                 nueva_celda.border = copy(celda_base.border)
                 nueva_celda.fill = copy(celda_base.fill)

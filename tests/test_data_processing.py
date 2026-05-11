@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from datetime import date, datetime
 
 import pandas as pd
@@ -6,7 +6,7 @@ import pytest
 from openpyxl import Workbook, load_workbook
 
 import main
-from excel.updater import append_dataframe_to_excel
+from excel.updater import append_dataframe_to_excel, ensure_sheet_exists_with_headers
 from utils.converter import normalizar_y_validar_dataset
 
 
@@ -99,6 +99,72 @@ def test_append_dataframe_to_excel_hoja_inexistente_lanza_error(tmp_path):
         )
 
 
+def test_obtener_ultima_fecha_hoja_inexistente_devuelve_none(tmp_path):
+    archivo = tmp_path / "maestro.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Datos"
+    wb.save(archivo)
+
+    resultado = main.obtener_ultima_fecha(str(archivo), "NoExiste", "Fecha")
+
+    assert resultado is None
+
+
+def test_ensure_sheet_exists_with_headers_crea_hoja_y_encabezados(tmp_path):
+    archivo = tmp_path / "maestro.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Base"
+    wb.save(archivo)
+
+    creada = ensure_sheet_exists_with_headers(
+        maestro_path=str(archivo),
+        hoja_destino="NuevaHoja",
+        headers=["Fecha", "Importe"],
+        columna_inicio=1,
+    )
+
+    assert creada is True
+
+    wb_check = load_workbook(archivo)
+    ws_check = wb_check["NuevaHoja"]
+    assert ws_check["A1"].value == "Fecha"
+    assert ws_check["B1"].value == "Importe"
+
+
+def test_append_dataframe_to_excel_sobre_hoja_recien_creada_inserta_desde_fila_2(tmp_path):
+    archivo = tmp_path / "maestro.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Base"
+    wb.save(archivo)
+
+    ensure_sheet_exists_with_headers(
+        maestro_path=str(archivo),
+        hoja_destino="Datos",
+        headers=["Fecha", "Importe"],
+        columna_inicio=1,
+    )
+
+    resultado = append_dataframe_to_excel(
+        maestro_path=str(archivo),
+        hoja_destino="Datos",
+        df=pd.DataFrame([["2026-01-02", 20]], columns=["Fecha", "Importe"]),
+        columna_inicio=1,
+    )
+
+    assert resultado["fila_inicio"] == 2
+    assert resultado["filas_insertadas"] == 1
+
+    wb_check = load_workbook(archivo)
+    ws_check = wb_check["Datos"]
+    assert ws_check["A1"].value == "Fecha"
+    assert ws_check["B1"].value == "Importe"
+    assert ws_check["A2"].value == "2026-01-02"
+    assert ws_check["B2"].value == 20
+
+
 def test_procesar_dataset_rango_invalido_devuelve_none(monkeypatch):
     class FixedDateTime(datetime):
         @classmethod
@@ -106,6 +172,7 @@ def test_procesar_dataset_rango_invalido_devuelve_none(monkeypatch):
             return cls(2026, 1, 10)
 
     monkeypatch.setattr(main, "datetime", FixedDateTime)
+    monkeypatch.setattr(main, "hoja_existe_en_maestro", lambda *args, **kwargs: True)
     monkeypatch.setattr(main, "obtener_ultima_fecha", lambda *args, **kwargs: datetime(2026, 1, 20))
 
     dataset = {
@@ -131,6 +198,7 @@ def test_procesar_dataset_permite_un_dia_pendiente(monkeypatch):
             return cls(2026, 4, 27)
 
     monkeypatch.setattr(main, "datetime", FixedDateTime)
+    monkeypatch.setattr(main, "hoja_existe_en_maestro", lambda *args, **kwargs: True)
     monkeypatch.setattr(main, "obtener_ultima_fecha", lambda *args, **kwargs: datetime(2026, 4, 25))
 
     dataset = {
@@ -196,6 +264,7 @@ def test_main_proceso_usa_maestro_path_por_usuario(monkeypatch):
     estado = {"usuario_actual": None}
     maestro_paths_procesar = []
     maestro_paths_append = []
+    headers_creados = []
 
     monkeypatch.setattr(main, "cargar_config", lambda: config)
     monkeypatch.setattr(main, "setup_logger", lambda: logging.getLogger("test"))
@@ -225,6 +294,12 @@ def test_main_proceso_usa_maestro_path_por_usuario(monkeypatch):
     monkeypatch.setattr(main, "descargar_y_leer_dataset", fake_descargar)
     monkeypatch.setattr(main, "normalizar_y_validar_dataset", lambda df, *args, **kwargs: (df, {}))
 
+    def fake_ensure_sheet(maestro_path, hoja_destino, headers, columna_inicio):
+        headers_creados.append((maestro_path, hoja_destino, headers, columna_inicio))
+        return False
+
+    monkeypatch.setattr(main, "ensure_sheet_exists_with_headers", fake_ensure_sheet)
+
     def fake_append(maestro_path, hoja_destino, df, columna_inicio):
         maestro_paths_append.append(maestro_path)
         return {"fila_inicio": 2, "filas_insertadas": len(df)}
@@ -236,3 +311,7 @@ def test_main_proceso_usa_maestro_path_por_usuario(monkeypatch):
     assert salida == config["paths"]["download_dir"]
     assert maestro_paths_procesar == ["C:/maestros/usr1.xlsx", "C:/maestros/usr2.xlsx"]
     assert maestro_paths_append == ["C:/maestros/usr1.xlsx", "C:/maestros/usr2.xlsx"]
+    assert headers_creados == [
+        ("C:/maestros/usr1.xlsx", "facturadosok", ["Fecha", "Total"], 1),
+        ("C:/maestros/usr2.xlsx", "facturadosok", ["Fecha", "Total"], 1),
+    ]
