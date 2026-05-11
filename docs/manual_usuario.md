@@ -8,6 +8,7 @@ El sistema permite:
 - Descargar automáticamente datasets desde la plataforma web.
 - Procesar y normalizar la información.
 - Insertar registros nuevos en el Excel maestro.
+- Crear automáticamente una hoja destino si no existe.
 - Mantener actualizadas las fórmulas.
 - Generar logs de ejecución.
 
@@ -22,6 +23,11 @@ Antes de usar el sistema:
 - Acceso a internet.
 - Archivos Excel maestro existentes (uno por usuario configurado).
 - `config.json` completo con credenciales y rutas.
+
+Importante:
+
+- El archivo Excel maestro de cada usuario debe existir.
+- La hoja destino de cada dataset ya no necesita existir previamente: el sistema puede crearla automáticamente.
 
 ## 3. Instalación en macOS
 
@@ -38,8 +44,11 @@ Editar `config.json` y completar:
 - Usuario (`usuarios[].nombre`)
 - Contraseña (`usuarios[].password`)
 - Ruta completa del Excel maestro por usuario (`usuarios[].maestro_path`)
+- Reintentos de login si se quiere sobrescribir el valor por defecto (`web.login_retries`)
 
 Si se configuran múltiples usuarios, cada uno debe tener su propio `maestro_path`.
+
+Si `web.login_retries` no se informa, el sistema usa `3` intentos automáticamente ante fallos transitorios de login.
 
 ### Paso 3 - Ejecutar instalador
 
@@ -65,10 +74,17 @@ Este proceso:
 - Manual (visible): `run.command`
 - Automático (headless): `run_auto.command`
 
-En ambos casos, al finalizar se anuncia verbalmente:
+En ejecución manual, al finalizar se anuncia verbalmente:
 
 - Éxito: "Grupo 2000 finalizado correctamente"
 - Error: "Error en la ejecución. Revisar log."
+
+En ejecución automática:
+
+- No se usa `say`.
+- Se escribe `logs/last_run.log`.
+- Se escribe `logs/debug.log`.
+- Si VoiceOver estaba activo, `run_auto.command` lo restaura al terminar.
 
 ### Windows
 
@@ -125,6 +141,7 @@ crontab -l
 ```
 
 Importante: usar `run_auto.command` para evitar navegador visible en ejecuciones automáticas.
+El script también deja un `logs/debug.log` con la fecha de corrida y el código de salida.
 
 ## 7. Logs y seguimiento
 
@@ -132,11 +149,21 @@ Log principal:
 
 `logs/last_run.log`
 
+Log auxiliar de automatización en macOS:
+
+`logs/debug.log`
+
 Permite revisar:
 
 - Errores
 - Pasos ejecutados
 - Mensajes de diagnóstico
+
+Si una hoja destino no existe, el log deja trazado:
+
+- Que se usó `fecha_inicial_si_vacio`.
+- Que la hoja fue creada automáticamente.
+- Que los encabezados se generaron a partir del dataset descargado.
 
 ## 7.1 Chequeo/Fix de formato de datasets
 
@@ -163,6 +190,33 @@ Acción:
 2. Guardar.
 3. Ejecutar nuevamente.
 
+Nota: si el problema fue transitorio, el sistema intenta el login automáticamente hasta `3` veces por defecto antes de fallar.
+
+### Sitio no disponible o caído
+
+Mensaje:
+
+`ERROR: La web no responde o está caída. Revise el archivo de log para más detalles.`
+
+Acción:
+
+1. Esperar unos minutos.
+2. Verificar conectividad a internet.
+3. Reintentar la ejecución.
+4. Si persiste, revisar `logs/last_run.log` para identificar si fue timeout o página de indisponibilidad.
+
+### Descarga bloqueada por Chrome
+
+Mensaje:
+
+`ERROR: Chrome bloqueó la descarga automática. Revise el archivo de log para más detalles.`
+
+Acción:
+
+1. Reintentar la ejecución.
+2. Verificar que Chrome no haya dejado advertencias de descarga peligrosa.
+3. Si persiste, reportar el incidente junto con `logs/last_run.log`.
+
 ### LibreOffice no disponible
 
 Se registra en log cuando no se puede convertir `.xls`.
@@ -176,6 +230,17 @@ Mensaje:
 `No se encontró el archivo: [ruta]`
 
 Acción: verificar `usuarios[].maestro_path` del usuario que se está procesando en `config.json`.
+
+### Hoja destino inexistente en el maestro
+
+Si la hoja configurada en `datasets[].hoja_destino` no existe:
+
+1. El sistema no falla por ese motivo.
+2. Usa `procesamiento.fecha_inicial_si_vacio` para determinar desde qué fecha descargar.
+3. Crea la hoja automáticamente al momento de insertar el dataset.
+4. Usa como encabezados los nombres de columnas del dataset normalizado.
+
+Esto queda registrado en `logs/last_run.log`.
 
 ### Fórmulas tipo array en Excel maestro
 
@@ -193,7 +258,10 @@ Acción:
 - No editar manualmente las últimas filas mientras corre el sistema.
 - Evitar fórmulas array en columnas extendibles.
 - Revisar periódicamente `logs/last_run.log`.
+- Si se usa ejecución automática en macOS, revisar también `logs/debug.log`.
 - Mantener credenciales actualizadas.
+- Tener en cuenta que un único día pendiente también se procesa; no hace falta esperar a acumular varios días.
+- Si se agrega un dataset nuevo, no es obligatorio crear manualmente la hoja destino antes de la primera corrida.
 
 ## 10. Soporte
 
