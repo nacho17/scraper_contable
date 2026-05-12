@@ -1,8 +1,10 @@
-﻿import os
-import time
-import shutil
-import pandas as pd
 import logging
+import os
+import shutil
+import time
+
+import pandas as pd
+
 from utils.converter import convertir_xls_a_xlsx
 from web.downloader import DownloadBlockedError
 
@@ -15,18 +17,14 @@ def leer_archivo_descargado(path):
 
     extension = os.path.splitext(path)[1].lower()
 
-    # Si es .xls lo convertimos
     if extension == ".xls":
         path = convertir_xls_a_xlsx(path)
 
-    # Siempre leer como xlsx
     df_raw = pd.read_excel(path, header=None, engine="openpyxl")
 
-    # Usuario en A1
     celda_a1 = df_raw.iloc[0, 0]
     usuario = str(celda_a1).replace("Cliente:", "").strip()
 
-    # Header en fila 4
     df = df_raw.iloc[3:].copy()
     df.columns = df.iloc[0]
     df = df[1:].reset_index(drop=True)
@@ -55,30 +53,28 @@ def mover_y_renombrar(path_original, carpeta_destino,
     return nuevo_path
 
 
-def esperar_descarga_completa(download_dir, archivos_antes, timeout=480):
+def esperar_descarga_completa(download_dir, archivos_antes, timeout=480, startup_timeout=15):
     segundos = 0
 
     while segundos < timeout:
         actuales = set(os.listdir(download_dir))
         nuevos = actuales - archivos_antes
 
-        # Si todav?a no aparece nada nuevo
         if not nuevos:
+            if segundos >= startup_timeout:
+                raise TimeoutError("La descarga no comenzo en el tiempo esperado.")
             time.sleep(1)
             segundos += 1
             continue
 
-        # Hay un archivo nuevo
         archivo = nuevos.pop()
         ruta = os.path.join(download_dir, archivo)
 
-        # Si todav?a se est? descargando
         if archivo.endswith(".crdownload"):
             time.sleep(1)
             segundos += 1
             continue
 
-        # Verificamos que el tama?o est? estable
         size1 = os.path.getsize(ruta)
         time.sleep(1)
         size2 = os.path.getsize(ruta)
@@ -91,10 +87,10 @@ def esperar_descarga_completa(download_dir, archivos_antes, timeout=480):
     archivos_actuales = set(os.listdir(download_dir)) - archivos_antes
     if _hay_indicio_descarga_bloqueada(archivos_actuales):
         raise DownloadBlockedError(
-            "Chrome dejó una descarga incompleta o sin confirmar. Posible bloqueo de seguridad."
+            "Chrome dejo una descarga incompleta o sin confirmar. Posible bloqueo de seguridad."
         )
 
-    raise TimeoutError("La descarga no se complet? en el tiempo esperado.")
+    raise TimeoutError("La descarga no se completo en el tiempo esperado.")
 
 
 def _hay_indicio_descarga_bloqueada(archivos):

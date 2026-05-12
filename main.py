@@ -22,11 +22,13 @@ from utils.reader import leer_archivo_descargado, mover_y_renombrar, esperar_des
 from web.downloader import (
     AuthenticationError,
     DownloadBlockedError,
+    NoDataForRangeError,
     SiteUnavailableError,
     exportar_dataset,
     iniciar_driver,
     login,
     logout,
+    mensaje_sin_datos,
 )
 
 
@@ -43,7 +45,7 @@ def obtener_ultima_fecha(maestro_path, hoja_1, columna_fecha):
             engine="openpyxl",
         )
     except FileNotFoundError as exc:
-        raise Exception(f"No se encontró el archivo: {maestro_path}") from exc
+        raise Exception(f"No se encontro el archivo: {maestro_path}") from exc
     except ValueError as exc:
         if "Worksheet named" in str(exc) and "not found" in str(exc):
             return None
@@ -70,7 +72,7 @@ def hoja_existe_en_maestro(maestro_path, hoja):
     try:
         wb = load_workbook(maestro_path, read_only=True)
     except FileNotFoundError as exc:
-        raise Exception(f"No se encontrÃ³ el archivo: {maestro_path}") from exc
+        raise Exception(f"No se encontro el archivo: {maestro_path}") from exc
 
     return hoja in wb.sheetnames
 
@@ -97,14 +99,14 @@ def procesar_dataset(
     if ultima_fecha is None:
         if not hoja_existia:
             logger.warning(
-                "La hoja '%s' no existe en el maestro. Se usará fecha_inicial_si_vacio.",
+                "La hoja '%s' no existe en el maestro. Se usara fecha_inicial_si_vacio.",
                 hoja_destino,
             )
         else:
-            logger.warning("Archivo vacío o sin fechas válidas.")
+            logger.warning("Archivo vacio o sin fechas validas.")
         fecha_desde = fecha_inicial_config
     else:
-        logger.info("Última fecha encontrada: %s", ultima_fecha.date())
+        logger.info("Ultima fecha encontrada: %s", ultima_fecha.date())
         fecha_desde = (ultima_fecha + timedelta(days=1)).date()
 
     hoy = datetime.today().date()
@@ -115,7 +117,7 @@ def procesar_dataset(
 
     if fecha_desde > fecha_hasta:
         logger.warning(
-            "Rango inválido: fecha_desde (%s) es mayor que fecha_hasta (%s). No se procesará ningún dataset.",
+            "Rango invalido: fecha_desde (%s) es mayor que fecha_hasta (%s). No se procesara ningun dataset.",
             fecha_desde,
             fecha_hasta,
         )
@@ -144,20 +146,42 @@ def descargar_y_leer_dataset(
 
         archivos_antes = set(os.listdir(ruta_descargas))
 
-        exportar_dataset(
-            driver,
-            dataset["url"],
-            sub_desde,
-            sub_hasta,
-        )
-
-        ultimo_archivo = esperar_descarga_completa(ruta_descargas, archivos_antes)
+        try:
+            exportar_dataset(
+                driver,
+                dataset["url"],
+                sub_desde,
+                sub_hasta,
+            )
+            ultimo_archivo = esperar_descarga_completa(
+                ruta_descargas,
+                archivos_antes,
+                startup_timeout=15,
+            )
+        except NoDataForRangeError as exc:
+            logger.warning("%s -> %s", dataset["nombre"], exc)
+            continue
+        except TimeoutError as exc:
+            mensaje = mensaje_sin_datos(driver)
+            if mensaje:
+                logger.warning(
+                    "%s -> No hay datos para el bloque %s -> %s: %s",
+                    dataset["nombre"],
+                    sub_desde,
+                    sub_hasta,
+                    mensaje,
+                )
+                continue
+            raise TimeoutError(
+                f"{dataset['nombre']} -> la exportacion no inicio o no completo para el bloque "
+                f"{sub_desde} -> {sub_hasta}: {exc}"
+            ) from exc
 
         logger.info("Archivo detectado: %s", ultimo_archivo)
 
         usuario_archivo, df_nuevo = leer_archivo_descargado(ultimo_archivo)
 
-        logger.info("Filas de esta porción del dataset: %s", len(df_nuevo))
+        logger.info("Filas de esta porcion del dataset: %s", len(df_nuevo))
 
         if usuario_detectado is None:
             usuario_detectado = usuario_archivo
@@ -178,6 +202,9 @@ def descargar_y_leer_dataset(
 
         logger.info("Movido a: %s", nuevo_path)
 
+    if not dfs:
+        return usuario_detectado, pd.DataFrame()
+
     df_final = pd.concat(dfs, ignore_index=True)
 
     return usuario_detectado, df_final
@@ -193,7 +220,7 @@ def limpiar_download_temp(download_dir):
 def resolver_headless(mode):
     sistema = platform.system()
 
-    if sistema == "Darwin":
+    if sistema in {"Darwin", "Windows"}:
         return mode == "auto"
 
     return False
@@ -218,12 +245,18 @@ def notificar_windows(success):
             mensaje = "Proceso finalizado correctamente"
             estilo = 0x00000040
         else:
-            mensaje = "Error en la ejecución. Revisar log."
+            mensaje = "Error en la ejecucion. Revisar log."
             estilo = 0x00000010
 
         ctypes.windll.user32.MessageBoxW(0, mensaje, "Grupo2000", estilo)
     except Exception:
         pass
+
+
+def _registrar_error(logger, errores, nivel, contexto, nombre, exc):
+    mensaje = f"{contexto} '{nombre}' fallo: {exc}"
+    errores.append(mensaje)
+    getattr(logger, nivel)(mensaje)
 
 
 def main_proceso(mode="manual"):
@@ -244,106 +277,162 @@ def main_proceso(mode="manual"):
 
     download_dir = config["paths"]["download_dir"]
     headless = resolver_headless(mode)
-    logger.info("Modo de ejecución: %s | Headless: %s", mode, headless)
+    logger.info("Modo de ejecucion: %s | Headless: %s", mode, headless)
     driver = iniciar_driver(download_dir, headless=headless)
 
-    for usuario in usuarios:
-        maestro_path = usuario["maestro_path"]
-        logger.info("Procesando usuario: %s", usuario["nombre"])
+    errores = []
+    exitos = 0
 
-        login(
-            driver,
-            web_config["login_url"],
-            usuario["username"],
-            usuario["password"],
-            max_retries=login_retries,
-        )
+    try:
+        for usuario in usuarios:
+            maestro_path = usuario["maestro_path"]
+            logger.info("Procesando usuario: %s", usuario["nombre"])
 
-        for dataset in datasets:
-            rango = procesar_dataset(
-                maestro_path,
-                dataset,
-                fecha_inicial_config,
-                logger,
-            )
+            usuario_logueado = False
+            usuario_con_actividad = False
 
-            if rango is None:
-                continue
+            try:
+                login(
+                    driver,
+                    web_config["login_url"],
+                    usuario["username"],
+                    usuario["password"],
+                    max_retries=login_retries,
+                )
+                usuario_logueado = True
 
-            fecha_desde, fecha_hasta = rango
+                for dataset in datasets:
+                    try:
+                        rango = procesar_dataset(
+                            maestro_path,
+                            dataset,
+                            fecha_inicial_config,
+                            logger,
+                        )
 
-            usuario_archivo, df_final = descargar_y_leer_dataset(
-                driver,
-                dataset,
-                fecha_desde,
-                fecha_hasta,
-                download_dir,
-                config["paths"]["procesados_dir"],
-                logger,
-            )
+                        if rango is None:
+                            usuario_con_actividad = True
+                            continue
 
-            if df_final is None or df_final.empty:
-                logger.info(
-                    "%s -> No hay fechas nuevas para procesar.",
-                    dataset["nombre"],
+                        fecha_desde, fecha_hasta = rango
+
+                        usuario_archivo, df_final = descargar_y_leer_dataset(
+                            driver,
+                            dataset,
+                            fecha_desde,
+                            fecha_hasta,
+                            download_dir,
+                            config["paths"]["procesados_dir"],
+                            logger,
+                        )
+
+                        if df_final is None or df_final.empty:
+                            logger.info(
+                                "%s -> No hay datos para procesar en el rango solicitado.",
+                                dataset["nombre"],
+                            )
+                            usuario_con_actividad = True
+                            continue
+
+                        if usuario_archivo != usuario["nombre"]:
+                            raise Exception(
+                                f"El archivo pertenece a {usuario_archivo} pero se esperaba {usuario['nombre']}"
+                            )
+
+                        df_final, resumen = normalizar_y_validar_dataset(
+                            df_final,
+                            dataset["columna_fecha"],
+                            dataset["columnas_importe"],
+                            logger=logger,
+                        )
+
+                        logger.info("Archivo valido para usuario %s", usuario_archivo)
+                        logger.info("Total filas unificadas: %s", len(df_final))
+                        logger.info("Resumen de validaciones:")
+                        logger.info("%s", resumen)
+
+                        hoja_creada = ensure_sheet_exists_with_headers(
+                            maestro_path=maestro_path,
+                            hoja_destino=dataset["hoja_destino"],
+                            headers=list(df_final.columns),
+                            columna_inicio=dataset["columna_inicio"],
+                        )
+
+                        if hoja_creada:
+                            logger.info(
+                                "Se creo la hoja '%s' con encabezados tomados del dataset.",
+                                dataset["hoja_destino"],
+                            )
+
+                        resultado_insert = append_dataframe_to_excel(
+                            maestro_path=maestro_path,
+                            hoja_destino=dataset["hoja_destino"],
+                            df=df_final,
+                            columna_inicio=dataset["columna_inicio"],
+                        )
+
+                        if dataset["tiene_formulas"]:
+                            estirar_formulas(
+                                maestro_path=maestro_path,
+                                hoja_destino=dataset["hoja_destino"],
+                                fila_inicio=resultado_insert["fila_inicio"],
+                                filas_insertadas=resultado_insert["filas_insertadas"],
+                            )
+
+                        logger.info(
+                            "%s -> %s filas insertadas desde fila %s",
+                            dataset["nombre"],
+                            resultado_insert["filas_insertadas"],
+                            resultado_insert["fila_inicio"],
+                        )
+                        usuario_con_actividad = True
+                        exitos += 1
+                    except Exception as exc:
+                        _registrar_error(
+                            logger,
+                            errores,
+                            "error",
+                            f"Dataset del usuario {usuario['nombre']}",
+                            dataset["nombre"],
+                            exc,
+                        )
+                        continue
+            except Exception as exc:
+                _registrar_error(
+                    logger,
+                    errores,
+                    "error",
+                    "Usuario",
+                    usuario["nombre"],
+                    exc,
                 )
                 continue
+            finally:
+                if usuario_logueado:
+                    try:
+                        logout(driver, web_config["logout_url"])
+                    except Exception as exc:
+                        _registrar_error(
+                            logger,
+                            errores,
+                            "warning",
+                            f"Logout del usuario {usuario['nombre']}",
+                            usuario["nombre"],
+                            exc,
+                        )
 
-            if usuario_archivo != usuario["nombre"]:
-                raise Exception(
-                    f"El archivo pertenece a {usuario_archivo} pero se esperaba {usuario['nombre']}"
-                )
+            if usuario_con_actividad:
+                exitos += 1
+    finally:
+        driver.quit()
 
-            df_final, resumen = normalizar_y_validar_dataset(
-                df_final,
-                dataset["columna_fecha"],
-                dataset["columnas_importe"],
-                logger=logger,
-            )
+    if errores:
+        logger.warning("Resumen de fallos parciales: %s", len(errores))
+        for error in errores:
+            logger.warning(error)
 
-            logger.info("Archivo válido para usuario %s", usuario_archivo)
-            logger.info("Total filas unificadas: %s", len(df_final))
-            logger.info("Resumen de validaciones:")
-            logger.info("%s", resumen)
-
-            hoja_creada = ensure_sheet_exists_with_headers(
-                maestro_path=maestro_path,
-                hoja_destino=dataset["hoja_destino"],
-                headers=list(df_final.columns),
-                columna_inicio=dataset["columna_inicio"],
-            )
-
-            if hoja_creada:
-                logger.info(
-                    "Se creó la hoja '%s' con encabezados tomados del dataset.",
-                    dataset["hoja_destino"],
-                )
-
-            resultado_insert = append_dataframe_to_excel(
-                maestro_path=maestro_path,
-                hoja_destino=dataset["hoja_destino"],
-                df=df_final,
-                columna_inicio=dataset["columna_inicio"],
-            )
-
-            if dataset["tiene_formulas"]:
-                estirar_formulas(
-                    maestro_path=maestro_path,
-                    hoja_destino=dataset["hoja_destino"],
-                    fila_inicio=resultado_insert["fila_inicio"],
-                    filas_insertadas=resultado_insert["filas_insertadas"],
-                )
-
-            logger.info(
-                "%s -> %s filas insertadas desde fila %s",
-                dataset["nombre"],
-                resultado_insert["filas_insertadas"],
-                resultado_insert["fila_inicio"],
-            )
-
-        logout(driver, web_config["logout_url"])
-
-    driver.quit()
+    if errores and exitos == 0:
+        raise Exception("La ejecucion no pudo completar ningun usuario o dataset correctamente.")
 
     return download_dir
 
@@ -364,27 +453,27 @@ if __name__ == "__main__":
         notificar_windows(success=True)
         sys.exit(0)
     except AuthenticationError:
-        logger.error("Error de autenticación: verifique usuario y contraseña en config.json")
-        print("ERROR: Problema de autenticación. Revise usuario/contraseña en config.json.")
+        logger.error("Error de autenticacion: verifique usuario y contrasena en config.json")
+        print("ERROR: Problema de autenticacion. Revise usuario/contrasena en config.json.")
         notificar_windows(success=False)
         sys.exit(1)
     except SiteUnavailableError as exc:
         logger.error("Error de disponibilidad del sitio: %s", exc)
-        print("ERROR: La web no responde o está caída. Revise el archivo de log para más detalles.")
+        print("ERROR: La web no responde o esta caida. Revise el archivo de log para mas detalles.")
         notificar_windows(success=False)
         sys.exit(1)
     except DownloadBlockedError as exc:
         logger.error("Descarga bloqueada por Chrome: %s", exc)
-        print("ERROR: Chrome bloqueó la descarga automática. Revise el archivo de log para más detalles.")
+        print("ERROR: Chrome bloqueo la descarga automatica. Revise el archivo de log para mas detalles.")
         notificar_windows(success=False)
         sys.exit(1)
     except MasterExcelArrayFormulaError as exc:
         logger.error(str(exc))
-        print("ERROR: El Excel maestro tiene fórmulas array en la última fila. Revise y vuelva a ejecutar.")
+        print("ERROR: El Excel maestro tiene formulas array en la ultima fila. Revise y vuelva a ejecutar.")
         notificar_windows(success=False)
         sys.exit(1)
     except Exception:
-        logger.exception("Error inesperado durante la ejecución.")
-        print("ERROR: Ocurrió un error inesperado. Revise el archivo de log para más detalles.")
+        logger.exception("Error inesperado durante la ejecucion.")
+        print("ERROR: Ocurrio un error inesperado. Revise el archivo de log para mas detalles.")
         notificar_windows(success=False)
         sys.exit(1)

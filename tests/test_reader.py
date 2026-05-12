@@ -68,3 +68,8 @@ def test_esperar_descarga_completa_identifica_bloqueo_de_chrome(tmp_path):
 
     with pytest.raises(DownloadBlockedError):
         esperar_descarga_completa(str(tmp_path), set(), timeout=0)
+
+
+def test_esperar_descarga_completa_falla_rapido_si_no_inicia(tmp_path):
+    with pytest.raises(TimeoutError, match="no comenzo"):
+        esperar_descarga_completa(str(tmp_path), set(), timeout=5, startup_timeout=0)

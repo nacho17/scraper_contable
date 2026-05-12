@@ -315,3 +315,84 @@ def test_main_proceso_usa_maestro_path_por_usuario(monkeypatch):
         ("C:/maestros/usr1.xlsx", "facturadosok", ["Fecha", "Total"], 1),
         ("C:/maestros/usr2.xlsx", "facturadosok", ["Fecha", "Total"], 1),
     ]
+
+
+def test_main_proceso_continua_si_falla_un_dataset(monkeypatch):
+    config = {
+        "web": {
+            "login_url": "https://example.com/login",
+            "logout_url": "https://example.com/logout",
+        },
+        "paths": {
+            "download_dir": "downloads_temp",
+            "procesados_dir": "procesados",
+        },
+        "procesamiento": {
+            "fecha_inicial_si_vacio": "2025-01-01",
+        },
+        "usuarios": [
+            {
+                "nombre": "USR1",
+                "username": "u1",
+                "password": "p1",
+                "maestro_path": "C:/maestros/usr1.xlsx",
+            },
+        ],
+        "datasets": [
+            {
+                "nombre": "OK",
+                "hoja_destino": "ok",
+                "columna_inicio": 1,
+                "columna_fecha": "Fecha",
+                "columnas_importe": ["Total"],
+                "tiene_formulas": False,
+                "url": "https://example.com/ok",
+            },
+            {
+                "nombre": "FALLA",
+                "hoja_destino": "falla",
+                "columna_inicio": 1,
+                "columna_fecha": "Fecha",
+                "columnas_importe": ["Total"],
+                "tiene_formulas": False,
+                "url": "https://example.com/falla",
+            },
+        ],
+    }
+
+    class DummyDriver:
+        def quit(self):
+            return None
+
+    inserts = []
+
+    monkeypatch.setattr(main, "cargar_config", lambda: config)
+    monkeypatch.setattr(main, "setup_logger", lambda: logging.getLogger("test"))
+    monkeypatch.setattr(main, "iniciar_driver", lambda *args, **kwargs: DummyDriver())
+    monkeypatch.setattr(main, "login", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main, "logout", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        main,
+        "procesar_dataset",
+        lambda *args, **kwargs: (date(2026, 1, 1), date(2026, 1, 2)),
+    )
+
+    def fake_descargar(driver, dataset, *args, **kwargs):
+        if dataset["nombre"] == "FALLA":
+            raise Exception("boom")
+        return "USR1", pd.DataFrame([["01/01/2026", "100,00"]], columns=["Fecha", "Total"])
+
+    monkeypatch.setattr(main, "descargar_y_leer_dataset", fake_descargar)
+    monkeypatch.setattr(main, "normalizar_y_validar_dataset", lambda df, *args, **kwargs: (df, {}))
+    monkeypatch.setattr(main, "ensure_sheet_exists_with_headers", lambda *args, **kwargs: False)
+
+    def fake_append(maestro_path, hoja_destino, df, columna_inicio):
+        inserts.append((maestro_path, hoja_destino, len(df)))
+        return {"fila_inicio": 2, "filas_insertadas": len(df)}
+
+    monkeypatch.setattr(main, "append_dataframe_to_excel", fake_append)
+
+    salida = main.main_proceso(mode="manual")
+
+    assert salida == "downloads_temp"
+    assert inserts == [("C:/maestros/usr1.xlsx", "ok", 1)]

@@ -145,3 +145,31 @@ def test_exportar_dataset_clasifica_timeout_como_sitio_caido(monkeypatch):
 
     with pytest.raises(downloader.SiteUnavailableError):
         downloader.exportar_dataset(driver, "https://example.com/dataset", date(2026, 1, 1), date(2026, 1, 2))
+
+
+def test_exportar_dataset_detecta_sin_datos(monkeypatch):
+    driver = FakeDriver(
+        [
+            {
+                "current_url": "https://example.com/dataset",
+                "page_source": "<html>No se encontraron registros</html>",
+            }
+        ]
+    )
+
+    class ClickableWait:
+        def __init__(self, driver, timeout):
+            self.driver = driver
+            self.timeout = timeout
+
+        def until(self, condition):
+            if self.timeout == 3:
+                raise TimeoutException("sin alert")
+            if self.timeout == 10:
+                return FakeButton()
+            return condition(self.driver)
+
+    monkeypatch.setattr(downloader, "WebDriverWait", ClickableWait)
+
+    with pytest.raises(downloader.NoDataForRangeError):
+        downloader.exportar_dataset(driver, "https://example.com/dataset", date(2026, 1, 1), date(2026, 1, 1))

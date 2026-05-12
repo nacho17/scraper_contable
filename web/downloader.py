@@ -25,6 +25,10 @@ class DownloadBlockedError(Exception):
     pass
 
 
+class NoDataForRangeError(Exception):
+    pass
+
+
 def iniciar_driver(download_dir, headless=False):
     if not os.path.exists(download_dir):
         os.makedirs(download_dir)
@@ -96,7 +100,7 @@ def login(driver, login_url, username, password, max_retries=3):
                 )
 
             if _login_invalido(driver):
-                raise AuthenticationError("Credenciales inválidas o vencidas.")
+                raise AuthenticationError("Credenciales invalidas o vencidas.")
 
             if _login_exitoso(driver):
                 logger.info("Logueado como %s en intento %s", username, intento)
@@ -127,8 +131,8 @@ def login(driver, login_url, username, password, max_retries=3):
 def _login_invalido(driver):
     page_text = (driver.page_source or "").lower()
     error_keywords = (
-        "credenciales inválidas",
         "credenciales invalidas",
+        "credenciales inválidas",
         "usuario o contraseña incorrect",
         "usuario o contrasena incorrect",
         "login incorrect",
@@ -160,25 +164,54 @@ def _mensaje_pagina_indisponible(driver):
     contenido = "\n".join(partes)
 
     errores = (
-        "this site can’t be reached",
         "this site can't be reached",
+        "this site can’t be reached",
         "err_connection",
         "err_name_not_resolved",
         "err_timed_out",
         "err_ssl",
+        "500 internal server error",
         "502 bad gateway",
         "503 service unavailable",
         "504 gateway timeout",
+        "internal server error",
         "service unavailable",
         "site maintenance",
         "temporarily unavailable",
         "no se puede acceder a este sitio",
+        "tardo demasiado en responder",
         "tardó demasiado en responder",
     )
 
     for error in errores:
         if error in contenido:
             return error
+
+    return None
+
+
+def mensaje_sin_datos(driver):
+    partes = [
+        (getattr(driver, "title", "") or "").lower(),
+        (getattr(driver, "current_url", "") or "").lower(),
+        (getattr(driver, "page_source", "") or "").lower(),
+    ]
+    contenido = "\n".join(partes)
+
+    mensajes = (
+        "no se encontraron registros",
+        "no se encontraron resultados",
+        "no existen registros",
+        "sin resultados",
+        "sin registros",
+        "no data",
+        "no records",
+        "0 registros",
+    )
+
+    for mensaje in mensajes:
+        if mensaje in contenido:
+            return mensaje
 
     return None
 
@@ -222,7 +255,7 @@ def exportar_dataset(driver, dataset_url, fecha_desde, fecha_hasta):
         )
     except TimeoutException as exc:
         raise SiteUnavailableError(
-            "La web no cargó a tiempo la pantalla de exportación del dataset."
+            "La web no cargo a tiempo la pantalla de exportacion del dataset."
         ) from exc
 
     fecha_desde_str = fecha_desde.strftime("%d/%m/%Y")
@@ -242,7 +275,7 @@ def exportar_dataset(driver, dataset_url, fecha_desde, fecha_hasta):
         ).click()
     except TimeoutException as exc:
         raise SiteUnavailableError(
-            "La web no habilitó a tiempo el botón de exportación."
+            "La web no habilito a tiempo el boton de exportacion."
         ) from exc
 
     logger.info("Export solicitado desde %s hasta %s", fecha_desde, fecha_hasta)
@@ -252,6 +285,11 @@ def exportar_dataset(driver, dataset_url, fecha_desde, fecha_hasta):
         alert = driver.switch_to.alert
         mensaje = alert.text
         alert.accept()
-        raise SiteUnavailableError(f"Error del sistema durante la exportación: {mensaje}")
+        raise SiteUnavailableError(f"Error del sistema durante la exportacion: {mensaje}")
     except TimeoutException:
+        mensaje = mensaje_sin_datos(driver)
+        if mensaje:
+            raise NoDataForRangeError(
+                f"No hay datos para exportar entre {fecha_desde} y {fecha_hasta}: {mensaje}"
+            )
         return

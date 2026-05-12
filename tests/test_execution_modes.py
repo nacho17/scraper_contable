@@ -13,7 +13,7 @@ def test_resolver_headless_en_macos(monkeypatch):
 def test_resolver_headless_en_windows(monkeypatch):
     monkeypatch.setattr(main.platform, "system", lambda: "Windows")
     assert main.resolver_headless("manual") is False
-    assert main.resolver_headless("auto") is False
+    assert main.resolver_headless("auto") is True
 
 
 def test_parse_args_default_es_manual(monkeypatch):
@@ -62,4 +62,4 @@ def test_notificar_windows_muestra_beep_y_messagebox(monkeypatch):
 
     assert eventos["beep"] == [fake_winsound.MB_ICONASTERISK, fake_winsound.MB_ICONHAND]
     assert eventos["msg"][0] == (0, "Proceso finalizado correctamente", "Grupo2000", 0x00000040)
-    assert eventos["msg"][1] == (0, "Error en la ejecución. Revisar log.", "Grupo2000", 0x00000010)
+    assert eventos["msg"][1] == (0, "Error en la ejecucion. Revisar log.", "Grupo2000", 0x00000010)
